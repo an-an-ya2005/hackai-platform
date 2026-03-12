@@ -53,8 +53,3 @@ cd hackai-platform
 =======
 
 
-🚀 Quick Start
-Clone Repository
-git clone https://github.com/your-username/hackai-platform.git
-cd hackai-platform
->>>>>>> 457072ea39d10fe050f08b4aaaa12d64e9eab4c1
