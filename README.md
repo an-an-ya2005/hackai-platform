@@ -36,6 +36,8 @@ Database        Cache        (Gemini API)
         │
         ▼
 Monitoring (Prometheus + Grafana)
+
+
 🚀 Quick Start
 Clone Repository
 git clone https://github.com/your-username/hackai-platform.git
