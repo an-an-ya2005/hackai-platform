@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 81471
+      POSTGRES_DB: ai_hackathon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
+      PORT: 3001
+      FRONTEND_URL: http://localhost
+      NODE_ENV: development
+      ENABLE_API_DOCS: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    depends_on:
+      - postgres
+    ports:
+      - "3001:3001"
+
+  ai:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      BACKEND_URL: http://backend:3001
+      NODE_ENV: development
+    depends_on:
+      - postgres
+      - backend
+    ports:
+      - "3002:3002"
+      - "3003:3003"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

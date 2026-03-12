@@ -1,0 +1,358 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # LOAD BALANCER (NGINX) - Development Configuration
+  # =============================================================================
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/nginx.conf:Z
+    depends_on:
+      - app1
+      - app2
+      - app3
+      - frontend
+    restart: unless-stopped
+    environment:
+      - FRONTEND_URL=${FRONTEND_URL}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+    networks:
+      - frontend
+      - backend
+
+  # =============================================================================
+  # BACKEND APPLICATION INSTANCES (Development)
+  # =============================================================================
+  app1: &backend-app
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.development
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - PORT=${PORT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - DEBUG_MODE=${DEBUG_MODE}
+      - ENABLE_API_DOCS=${ENABLE_API_DOCS}
+      - ENABLE_GRAPHQL_PLAYGROUND=${ENABLE_GRAPHQL_PLAYGROUND}
+    volumes:
+      # Mount source code for hot reload (optional)
+      - ./backend/src:/app/src:Z
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 60s
+    security_opt:
+      - label=disable
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKEND_MEMORY_LIMIT:-512m}
+          cpus: '${BACKEND_CPU_LIMIT:-0.5}'
+    networks:
+      - backend
+
+  app2:
+    <<: *backend-app
+
+  app3:
+    <<: *backend-app
+
+  # =============================================================================
+  # AI REVIEW SERVICE (Development)
+  # =============================================================================
+  ai-service:
+    build: 
+      context: ./ai
+      dockerfile: Dockerfile
+    env_file:
+      - .env.development
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - PORT=3002
+      - DATABASE_URL=${DATABASE_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - DEBUG_MODE=${DEBUG_MODE}
+      - MOCK_EXTERNAL_APIS=${MOCK_EXTERNAL_APIS}
+    volumes:
+      # Mount source code for hot reload (optional)
+      - ./ai/src:/app/src:Z
+    ports:
+      - "3002:3002"
+      - "3003:3003"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+    security_opt:
+      - label=disable
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+    networks:
+      - backend
+
+  # =============================================================================
+  # FRONTEND APPLICATION (Development)
+  # =============================================================================
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.development
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - PORT=3000  # Override PORT for frontend
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - HOT_RELOAD=${HOT_RELOAD}
+    volumes:
+      # Mount source code for hot reload (optional)
+      - ./frontend/app:/app/app:Z
+      - ./frontend/components:/app/components:Z
+      - ./frontend/lib:/app/lib:Z
+    ports:
+      - "${DEV_FRONTEND_PORT:-3004}:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+    security_opt:
+      - label=disable
+    deploy:
+      resources:
+        limits:
+          memory: ${FRONTEND_MEMORY_LIMIT:-256m}
+          cpus: '${FRONTEND_CPU_LIMIT:-0.25}'
+    networks:
+      - frontend
+
+  # =============================================================================
+  # DATABASE (PostgreSQL) - Development Configuration
+  # =============================================================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--auth-host=md5
+    ports:
+      - "5432:5432"  # Expose for development tools
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data:Z
+      - ./postgres/init-dev:/docker-entrypoint-initdb.d:Z
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - label=disable
+    deploy:
+      resources:
+        limits:
+          memory: ${DATABASE_MEMORY_LIMIT:-512m}
+          cpus: '${DATABASE_CPU_LIMIT:-0.5}'
+    networks:
+      - backend
+
+  # =============================================================================
+  # REDIS (Cache & Session Store) - Development Configuration
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server 
+      --appendonly yes 
+      --maxmemory 256mb 
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"  # Expose for development tools
+    volumes:
+      - redis_dev_data:/data:Z
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    security_opt:
+      - label=disable
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.25'
+    networks:
+      - backend
+
+  # =============================================================================
+  # MONITORING - PROMETHEUS (Development)
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.dev.yml:/etc/prometheus/prometheus.yml:Z
+      - prometheus_dev_data:/prometheus:Z
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-7d}'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+    security_opt:
+      - label=disable
+    networks:
+      - monitoring
+
+  # =============================================================================
+  # MONITORING - GRAFANA (Development)
+  # =============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+    volumes:
+      - grafana_dev_data:/var/lib/grafana:Z
+      - ./grafana/provisioning:/etc/grafana/provisioning:Z
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:Z
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+    security_opt:
+      - label=disable
+    networks:
+      - monitoring
+
+  # =============================================================================
+  # DEVELOPMENT TOOLS (Optional)
+  # =============================================================================
+  
+  # Adminer for database management
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # MailHog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    restart: unless-stopped
+    networks:
+      - backend
+
+# =============================================================================
+# PERSISTENT VOLUMES (Development)
+# =============================================================================
+volumes:
+  redis_dev_data:
+    driver: local
+    labels:
+      environment: "development"
+  grafana_dev_data:
+    driver: local
+    labels:
+      environment: "development"
+  postgres_dev_data:
+    driver: local
+    labels:
+      environment: "development"
+  prometheus_dev_data:
+    driver: local
+    labels:
+      environment: "development"
+
+# =============================================================================
+# NETWORKS (Development)
+# =============================================================================
+networks:
+  frontend:
+    driver: bridge
+    labels:
+      description: "Frontend network - Development"
+  backend:
+    driver: bridge
+    labels:
+      description: "Backend services network - Development"
+  monitoring:
+    driver: bridge
+    labels:
+      description: "Monitoring network - Development"

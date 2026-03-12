@@ -1,0 +1,25 @@
+{
+  "name": "external-review-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for External Idea Review using Gemini AI",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "@prisma/client": "^6.14.0",
+    "axios": "^1.6.0",
+    "dotenv": "^17.2.1"
+  },
+  "keywords": [
+    "mcp",
+    "gemini",
+    "ai",
+    "startup",
+    "review"
+  ]
+}

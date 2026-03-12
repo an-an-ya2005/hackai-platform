@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PARTICIPANT
+  ADMIN
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  EXTERNAL_IDEA_REVIEW
+  INTERNAL_IDEA_REVIEW
+  CATEGORIZATION
+  IMPLEMENTATION_REVIEW
+  COST_REVIEW
+  IMPACT_REVIEW
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+enum ReviewType {
+  EXTERNAL_IDEA
+  INTERNAL_IDEA
+  CATEGORIZATION
+  IMPLEMENTATION_FEASIBILITY
+  COST_ANALYSIS
+  CUSTOMER_IMPACT
+  MANUAL_REVIEW
+}
+
+enum ReviewResult {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  APPLICATION_STATUS_CHANGE
+  NEW_APPLICATION_SUBMITTED
+  APPLICATION_REVIEW_ASSIGNED
+  APPLICATION_REVIEW_COMPLETED
+  SYSTEM_ANNOUNCEMENT
+  DEADLINE_REMINDER
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String?  // Optional for OAuth users
+  name       String
+  firstName  String?
+  lastName   String?
+  avatar     String?
+  role       UserRole @default(PARTICIPANT)
+  provider   String?  // 'google', 'github', 'email', etc.
+  providerId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  applications Application[]
+  reviews      Review[]
+  notifications Notification[] @relation("UserNotifications")
+  sentNotifications Notification[] @relation("NotificationSender")
+
+  @@map("users")
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  title           String
+  description     String
+  problemStatement String
+  solution        String
+  techStack       String[]
+  teamSize        Int
+  teamMembers     String[]
+  githubRepo      String?
+  demoUrl         String?
+  status          ApplicationStatus @default(DRAFT)
+  submittedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  estimatedCost   Float?            // Cost requested by applicant
+  category        String?           // Auto-assigned category
+  rejectionReason String?          // Reason for rejection
+  isActive        Boolean          @default(true) // For soft delete
+
+  // Relations
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews  Review[]
+  aiReviews AIReview[]
+
+  @@map("applications")
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  score      Int      // 1-10 rating
+  feedback   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewerId    String
+  reviewer      User        @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, reviewerId])
+  @@map("reviews")
+}
+
+model AIReview {
+  id            String       @id @default(cuid())
+  type          ReviewType
+  result        ReviewResult @default(PENDING)
+  score         Float?       // AI confidence score (0-1)
+  feedback      String?      // AI generated feedback
+  metadata      Json?        // Additional AI analysis data
+  errorMessage  String?      // Error during AI processing
+  processedAt   DateTime?    // When AI completed processing
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  applicationId String
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, type])
+  @@map("ai_reviews")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String
+  read        Boolean          @default(false)
+  actionUrl   String?          // URL to navigate when notification is clicked
+  metadata    Json?            // Additional data (applicationId, etc.)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  userId      String
+  user        User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  senderId    String?          // Who triggered this notification (optional)
+  sender      User?            @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
