@@ -37,6 +37,7 @@ Database        Cache        (Gemini API)
         │
         ▼
 Monitoring (Prometheus + Grafana)
+<<<<<<< HEAD
 ```
 
 ---
@@ -49,3 +50,11 @@ Monitoring (Prometheus + Grafana)
 git clone https://github.com/an-an-ya2005/hackai-platform.git
 cd hackai-platform
 ```
+=======
+
+
+🚀 Quick Start
+Clone Repository
+git clone https://github.com/your-username/hackai-platform.git
+cd hackai-platform
+>>>>>>> 457072ea39d10fe050f08b4aaaa12d64e9eab4c1
