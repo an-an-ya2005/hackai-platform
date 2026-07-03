@@ -13,6 +13,14 @@ async function main() {
 
   if (existingAdmin) {
     console.log('⚠️  Admin user already exists, skipping creation');
+
+    // Ensure dev admin password stays in sync (seed uses bcryptjs, auth uses bcryptjs)
+    const hashedPassword = await bcrypt.hash('admin', 12);
+    await prisma.user.update({
+      where: { email: 'admin@admin.com' },
+      data: { password: hashedPassword, role: UserRole.ADMIN },
+    });
+    console.log('✅ Admin password synced for development');
     
     // Create a test notification for the existing admin if it doesn't exist
     const existingNotification = await prisma.notification.findFirst({

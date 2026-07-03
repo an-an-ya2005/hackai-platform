@@ -160,7 +160,7 @@ function ApplicationsContent() {
           <Badge className={getStatusColor(application.status)}>
             <span className="flex items-center gap-1">
               {getStatusIcon(application.status)}
-              {application.status.replace("_", " ")}
+              {application.status ? application.status.replace(/_/g, ' ') : 'UNKNOWN'}
             </span>
           </Badge>
         </div>

@@ -45,6 +45,11 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
   const [autoRefresh, setAutoRefresh] = useState(true);
   const { socket } = useWebSocket();
 
+  const formatLabel = (value: string | undefined | null) => {
+    if (!value) return 'Unknown';
+    return value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
   const getStageDisplayName = (stage: string) => {
     const stageNames: Record<string, string> = {
       'EXTERNAL_IDEA': 'External Idea Review',
@@ -63,7 +68,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
       'IMPACT_REVIEW': 'Impact Assessment',
       'MANUAL_REVIEW': 'Manual Review',
     };
-    return stageNames[stage] || stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return stageNames[stage] || formatLabel(stage);
   };
 
   const getStatusIcon = (status: string) => {

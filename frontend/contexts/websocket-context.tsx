@@ -36,7 +36,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     const token = authService.getToken();
     if (!user || !token) return;
 
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
     const newSocket = io(API_BASE_URL, {
       auth: {
         token: token,

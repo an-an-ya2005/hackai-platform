@@ -24,18 +24,16 @@ This guide provides detailed information for developers working on the AI Hackat
 git clone https://github.com/darshan45672/ai-hackathon.git
 cd ai-hackathon
 
-# Quick setup with script
-./setup.sh development
+# Create environment file
+cp .env.template .env
+# Edit .env with your values
 
-# Or manual setup
-cp .env.template .env.development
-# Edit .env.development with your values
-podman-compose -f podman-compose.development.yml up -d
+docker compose -f docker-compose.minimal.yml up --build
 ```
 
 ### Prerequisites
 
-- **Container Runtime**: Podman (recommended) or Docker
+- **Container Runtime**: Docker
 - **Node.js**: 18+ for local development
 - **Git**: Latest version
 
@@ -44,11 +42,7 @@ podman-compose -f podman-compose.development.yml up -d
 | File | Purpose | Committed |
 |------|---------|-----------|
 | `.env.template` | Template with all variables | ✅ Yes |
-| `.env.development` | Development configuration | ✅ Yes (safe values) |
-| `.env.production.template` | Production template | ✅ Yes |
-| `.env.production` | Production secrets | ❌ No (gitignored) |
-| `.env.local` | Personal overrides | ❌ No (gitignored) |
-| `.env` | Legacy/current environment | ❌ No (gitignored) |
+| `.env` | Local environment file | ❌ No (gitignored) |
 
 ## ⚙️ Environment Configuration
 
@@ -103,53 +97,54 @@ NODE_ENV="development"
 
 ```bash
 # Start all services
-podman-compose -f podman-compose.development.yml up -d
+docker compose -f docker-compose.minimal.yml up --build
 
 # View logs
-podman-compose -f podman-compose.development.yml logs -f
+docker compose -f docker-compose.minimal.yml logs -f
 
 # View specific service logs
-podman logs -f ai-hackathon_app1_1
+docker compose -f docker-compose.minimal.yml logs backend
+
+docker compose -f docker-compose.minimal.yml logs ai
+
+docker compose -f docker-compose.minimal.yml logs frontend
 
 # Restart specific service
-podman-compose -f podman-compose.development.yml restart app1
+docker compose -f docker-compose.minimal.yml restart backend
 
 # Stop all services
-podman-compose -f podman-compose.development.yml down
+docker compose -f docker-compose.minimal.yml down
 
 # Clean rebuild
-podman-compose -f podman-compose.development.yml down
-podman-compose -f podman-compose.development.yml build --no-cache
-podman-compose -f podman-compose.development.yml up -d
+docker compose -f docker-compose.minimal.yml down
+docker compose -f docker-compose.minimal.yml build --no-cache
+docker compose -f docker-compose.minimal.yml up --build
 ```
 
 ### Service Health Check
 
 ```bash
 # Check all containers
-podman ps --format "table {{.Names}}\t{{.Status}}"
+docker compose -f docker-compose.minimal.yml ps
 
-# Check application health
-curl http://localhost/health
-
-# Check API health
-curl http://localhost/api/health
+# Check backend health
+curl http://localhost:3001/api/health
 ```
 
 ### Container Debugging
 
 ```bash
-# Enter container shell
-podman exec -it ai-hackathon_app1_1 /bin/bash
+# Enter backend container shell
+docker compose -f docker-compose.minimal.yml exec backend sh
 
 # Check environment variables
-podman exec ai-hackathon_app1_1 env | grep -E "(NODE_ENV|FRONTEND_URL)"
+docker compose -f docker-compose.minimal.yml exec backend env | grep -E "(NODE_ENV|FRONTEND_URL)"
 
 # Check container logs
-podman logs --tail=50 ai-hackathon_app1_1
+docker compose -f docker-compose.minimal.yml logs backend
 
 # Inspect container
-podman inspect ai-hackathon_app1_1
+docker inspect $(docker compose -f docker-compose.minimal.yml ps -q backend)
 ```
 
 ## 🗄️ Database Management
@@ -184,13 +179,13 @@ open http://localhost/adminer
 # Server: postgres, Username: postgres, Password: password, Database: ai_hackathon
 
 # Via psql (command line)
-podman exec -it ai-hackathon_postgres_1 psql -U postgres ai_hackathon
+docker compose -f docker-compose.minimal.yml exec postgres psql -U postgres ai_hackathon
 
 # Backup database
-podman exec ai-hackathon_postgres_1 pg_dump -U postgres ai_hackathon > backup.sql
+docker compose -f docker-compose.minimal.yml exec postgres pg_dump -U postgres ai_hackathon > backup.sql
 
 # Restore database
-podman exec -i ai-hackathon_postgres_1 psql -U postgres ai_hackathon < backup.sql
+docker compose -f docker-compose.minimal.yml exec -T postgres psql -U postgres ai_hackathon < backup.sql
 ```
 
 ### Common Database Tasks
@@ -447,10 +442,10 @@ npm run test:integration
 DEBUG=* npm run start:dev
 
 # View detailed logs
-podman logs -f ai-hackathon_app1_1
+docker compose -f docker-compose.minimal.yml logs backend
 
 # Check environment
-podman exec ai-hackathon_app1_1 env | grep NODE_ENV
+docker compose -f docker-compose.minimal.yml exec backend env | grep NODE_ENV
 ```
 
 ### Frontend Debugging
@@ -480,7 +475,7 @@ DEBUG="prisma:query" npm run start:dev
 
 | Issue | Solution |
 |-------|----------|
-| OAuth redirects to Grafana | Check `FRONTEND_URL=http://localhost` |
+| OAuth redirects to the wrong host | Check `FRONTEND_URL=http://localhost` |
 | Database connection failed | Verify `DATABASE_URL` and postgres container |
 | CORS errors | Check `CORS_ORIGIN` settings |
 | JWT errors | Verify `JWT_SECRET` configuration |
@@ -488,35 +483,24 @@ DEBUG="prisma:query" npm run start:dev
 
 ## 📊 Performance Monitoring
 
-### Grafana Dashboards
-
-- **URL**: http://localhost:3000
-- **Login**: admin/admin
-- **Dashboards**: Application metrics, database performance, API response times
-
-### Prometheus Metrics
-
-- **URL**: http://localhost:9091
-- **Metrics**: Custom application metrics, system metrics
-
 ### Application Logs
 
 ```bash
 # View all service logs
-podman-compose -f podman-compose.development.yml logs -f
+docker compose -f docker-compose.minimal.yml logs -f
 
 # View specific service
-podman logs -f ai-hackathon_app1_1
+docker compose -f docker-compose.minimal.yml logs backend
 
 # Filter logs
-podman logs ai-hackathon_app1_1 2>&1 | grep ERROR
+docker compose -f docker-compose.minimal.yml logs backend 2>&1 | Select-String -Pattern ERROR
 ```
 
 ### Performance Optimization
 
 ```bash
 # Check memory usage
-podman stats
+docker stats
 
 # Monitor database queries
 # Enable slow query logging in postgres
@@ -526,26 +510,6 @@ npm run start:dev -- --inspect
 ```
 
 ## 🔧 Advanced Configuration
-
-### Custom nginx Configuration
-
-```bash
-# Edit nginx config
-nano nginx.dev.conf
-
-# Reload nginx
-podman exec ai-hackathon_nginx_1 nginx -s reload
-```
-
-### Redis Configuration
-
-```bash
-# Access Redis CLI
-podman exec -it ai-hackathon_redis_1 redis-cli
-
-# Monitor Redis
-podman exec ai-hackathon_redis_1 redis-cli monitor
-```
 
 ### Email Testing
 
@@ -597,6 +561,5 @@ npm run migrate:prod
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Prisma Documentation](https://www.prisma.io/docs)
 - [Docker Documentation](https://docs.docker.com/)
-- [Podman Documentation](https://podman.io/getting-started/)
 
 For questions or issues, please check the main [README.md](README.md) or open an issue on GitHub.

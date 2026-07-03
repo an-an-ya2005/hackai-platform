@@ -14,13 +14,13 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:3000'], // Frontend URL
+    origin: ['http://127.0.0.1:3000', 'http://localhost:3000'],
     credentials: true,
   },
 })
 export class ApplicationStatusGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   private readonly logger = new Logger(ApplicationStatusGateway.name);
   private userSockets = new Map<string, string>(); // userId -> socketId

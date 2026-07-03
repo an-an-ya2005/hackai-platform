@@ -33,14 +33,16 @@ export function ThemeProvider({
 
   // Initialize theme from localStorage on client side
   useEffect(() => {
-    setMounted(true)
     const savedTheme = localStorage?.getItem(storageKey) as Theme
     if (savedTheme) {
       setTheme(savedTheme)
     }
+    setMounted(true)
   }, [storageKey])
 
   useEffect(() => {
+    if (!mounted) return
+
     const root = window.document.documentElement
 
     root.classList.remove("light", "dark")
@@ -56,7 +58,7 @@ export function ThemeProvider({
     }
 
     root.classList.add(theme)
-  }, [theme])
+  }, [theme, mounted])
 
   const value = {
     theme,

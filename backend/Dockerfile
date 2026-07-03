@@ -1,6 +1,8 @@
 # Multi-stage build for production optimization
 FROM node:24-alpine AS builder
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy package files
@@ -8,7 +10,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies with legacy peer deps to handle conflicts
-RUN npm ci --only=production --legacy-peer-deps && npm install wait-on --legacy-peer-deps && npm cache clean --force
+RUN npm ci --legacy-peer-deps && npm cache clean --force
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -19,11 +21,14 @@ COPY . .
 # Build the application
 RUN npm run build
 
+# Remove development dependencies from the builder image before copying to production
+RUN npm prune --production --legacy-peer-deps
+
 # Production stage
 FROM node:24-alpine AS production
 
-# Install dumb-init and curl for proper signal handling and health checks
-RUN apk add --no-cache dumb-init curl
+# Install dumb-init, curl, and OpenSSL for Prisma on Alpine
+RUN apk add --no-cache dumb-init curl openssl
 
 # Create app directory
 WORKDIR /app
@@ -39,9 +44,9 @@ COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 COPY --chown=nestjs:nodejs docker-entrypoint.sh ./
 
-# Make the entrypoint script executable and ensure nestjs user owns /app
+# Normalize line endings for the entrypoint script and make it executable
 USER root
-RUN chmod +x docker-entrypoint.sh && chown -R nestjs:nodejs /app
+RUN tr -d '\r' < docker-entrypoint.sh > docker-entrypoint.sh.tmp && mv docker-entrypoint.sh.tmp docker-entrypoint.sh && chmod +x docker-entrypoint.sh && chown -R nestjs:nodejs /app
 USER nestjs
 
 # Expose port
@@ -53,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Start the application with dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["./docker-entrypoint.sh", "node", "dist/src/main"]
+CMD ["sh", "./docker-entrypoint.sh", "node", "dist/src/main"]

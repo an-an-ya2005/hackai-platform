@@ -13,8 +13,17 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Enable CORS with optimized settings
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  const allowedOrigins = corsOrigin
+    ? corsOrigin.split(',').map((o) => o.trim())
+    : [
+        configService.get('FRONTEND_URL'),
+        'http://127.0.0.1:3000',
+        'http://localhost:3000',
+      ].filter(Boolean);
+
   app.enableCors({
-    origin: configService.get('FRONTEND_URL'),
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

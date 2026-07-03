@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 81471
+      POSTGRES_DB: ai_hackathon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_hackathon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
+      PORT: 3001
+      FRONTEND_URL: http://127.0.0.1:3000
+      CORS_ORIGIN: http://127.0.0.1:3000,http://localhost:3000
+      NODE_ENV: development
+      ENABLE_API_DOCS: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # Pass callback URLs from host .env into the backend container
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ai:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      BACKEND_URL: http://backend:3001
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "3002:3002"
+      - "3003:3003"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://127.0.0.1:3001
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3001
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:

@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies with legacy peer deps to handle conflicts
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -17,6 +17,9 @@ COPY . .
 
 # Build the application
 RUN npm run build
+
+# Remove development dependencies from the builder image before copying to production
+RUN npm prune --production --legacy-peer-deps
 
 # Expose ports
 EXPOSE 3002 3003
