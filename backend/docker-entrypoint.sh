@@ -13,7 +13,38 @@ APP_PID=$!
 # Run DB setup and optional tasks in the background so they don't block port binding
 (
   echo "Background: waiting for PostgreSQL to be ready..."
-  until node -e "const net = require('net'); const client = new net.Socket(); client.connect(5432, 'postgres', () => { client.destroy(); process.exit(0); }); client.on('error', () => { client.destroy(); process.exit(1); });" 2>/dev/null; do
+  # Try INTERNAL_DATABASE_URL first (Render internal), then DATABASE_URL, then localhost:5432
+  until node -e '
+const net = require("net");
+const { URL } = require("url");
+const candidates = [];
+if (process.env.INTERNAL_DATABASE_URL) candidates.push(process.env.INTERNAL_DATABASE_URL);
+if (process.env.DATABASE_URL) candidates.push(process.env.DATABASE_URL);
+if (candidates.length === 0) candidates.push("postgres://localhost:5432");
+
+function tryUrl(i) {
+  if (i >= candidates.length) {
+    // none worked
+    process.exit(1);
+    return;
+  }
+  let host = "localhost";
+  let port = 5432;
+  try {
+    const parsed = new URL(candidates[i]);
+    host = parsed.hostname || host;
+    port = parsed.port ? Number(parsed.port) : port;
+  } catch (e) {
+    // ignore and use defaults
+  }
+  const client = new net.Socket();
+  client.setTimeout(4000);
+  client.connect(port, host, () => { client.destroy(); process.exit(0); });
+  client.on("error", () => { client.destroy(); tryUrl(i+1); });
+  client.on("timeout", () => { client.destroy(); tryUrl(i+1); });
+}
+tryUrl(0);
+' 2>/dev/null; do
     echo "Background: PostgreSQL not ready yet, retrying in 2 seconds..."
     sleep 2
   done
