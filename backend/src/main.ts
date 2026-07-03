@@ -14,8 +14,24 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Enable CORS with optimized settings
+  const frontendOrigins = (configService.get('CORS_ORIGIN') || configService.get('FRONTEND_URL') || '')
+    .split(',')
+    .map((origin: string) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: configService.get('FRONTEND_URL'),
+    origin: (requestOrigin, callback) => {
+      if (!requestOrigin) {
+        return callback(null, true); // allow non-browser requests like Postman
+      }
+
+      if (frontendOrigins.includes(requestOrigin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`Blocked CORS request from origin: ${requestOrigin}`);
+      return callback(new Error('Not allowed by CORS'), false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
