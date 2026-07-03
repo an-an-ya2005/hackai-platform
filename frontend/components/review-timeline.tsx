@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+// Separator import removed (unused)
 import { 
   Clock, 
   CheckCircle, 
@@ -230,7 +230,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
     }, 30000); // Refresh every 30 seconds
 
     return () => clearInterval(interval);
-  }, [autoRefresh, timeline]);
+  }, [autoRefresh, timeline, fetchAIReviewStatus]);
 
   // Listen for real-time updates
   useEffect(() => {

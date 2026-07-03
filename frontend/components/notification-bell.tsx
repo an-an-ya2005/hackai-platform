@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Bell, Check, CheckCheck, Trash2, Clock, Calendar, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,71 +24,9 @@ export function NotificationBell() {
   const [prevUnreadCount, setPrevUnreadCount] = useState(0);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchUnreadCount();
-    if (isOpen) {
-      fetchNotifications();
-    }
-  }, [isOpen]);
+  
 
-  // Add real-time polling for notifications
-  useEffect(() => {
-    const pollInterval = setInterval(() => {
-      fetchUnreadCount();
-    }, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(pollInterval);
-  }, []);
-
-  // Refresh notifications when the window gains focus (user comes back to the app)
-  useEffect(() => {
-    const handleFocus = () => {
-      fetchUnreadCount();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
-
-  // Listen for real-time notifications via WebSocket
-  useEffect(() => {
-    const handleNewNotification = (event: CustomEvent) => {
-      console.log('Notification bell received new notification:', event.detail);
-      
-      // Update unread count
-      setUnreadCount(prev => prev + 1);
-      setHasNewNotification(true);
-      
-      // If notifications dropdown is open, refresh the list
-      if (isOpen) {
-        fetchNotifications();
-      }
-      
-      // Remove animation after 3 seconds
-      setTimeout(() => setHasNewNotification(false), 3000);
-    };
-
-    const handleApplicationStatusUpdate = () => {
-      // Refresh notifications when application status changes
-      if (isOpen) {
-        fetchNotifications();
-      }
-      fetchUnreadCount();
-    };
-
-    // Add event listeners for WebSocket events
-    window.addEventListener('new-notification', handleNewNotification as EventListener);
-    window.addEventListener('application-status-updated', handleApplicationStatusUpdate);
-    window.addEventListener('application-rejected', handleApplicationStatusUpdate);
-
-    return () => {
-      window.removeEventListener('new-notification', handleNewNotification as EventListener);
-      window.removeEventListener('application-status-updated', handleApplicationStatusUpdate);
-      window.removeEventListener('application-rejected', handleApplicationStatusUpdate);
-    };
-  }, [isOpen]);
-
-  const fetchUnreadCount = async () => {
+  const fetchUnreadCount = useCallback(async () => {
     try {
       const count = await ApiClient.getUnreadCount();
       
@@ -109,7 +47,7 @@ export function NotificationBell() {
           audio.play().catch(() => {
             // Ignore errors if sound can't play (browser restrictions)
           });
-        } catch (error) {
+        } catch {
           // Ignore sound errors
         }
         
@@ -122,9 +60,9 @@ export function NotificationBell() {
     } catch (error) {
       console.error('Failed to fetch unread count:', error);
     }
-  };
+  }, [unreadCount, prevUnreadCount]);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
       const response = await ApiClient.getNotifications(1, 10);
@@ -135,7 +73,7 @@ export function NotificationBell() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleNotificationClick = async (notification: Notification) => {
     try {
@@ -218,6 +156,71 @@ export function NotificationBell() {
     if (days < 7) return `${days}d ago`;
     return date.toLocaleDateString();
   };
+
+  // Initial load and polling/focus/event listeners (moved after function declarations)
+  useEffect(() => {
+    fetchUnreadCount();
+    if (isOpen) {
+      fetchNotifications();
+    }
+  }, [isOpen, fetchUnreadCount, fetchNotifications]);
+
+  // Add real-time polling for notifications
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchUnreadCount();
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [fetchUnreadCount]);
+
+  // Refresh notifications when the window gains focus (user comes back to the app)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchUnreadCount();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchUnreadCount]);
+
+  // Listen for real-time notifications via WebSocket
+  useEffect(() => {
+    const handleNewNotification = (event: CustomEvent) => {
+      console.log('Notification bell received new notification:', event.detail);
+      
+      // Update unread count
+      setUnreadCount(prev => prev + 1);
+      setHasNewNotification(true);
+      
+      // If notifications dropdown is open, refresh the list
+      if (isOpen) {
+        fetchNotifications();
+      }
+      
+      // Remove animation after 3 seconds
+      setTimeout(() => setHasNewNotification(false), 3000);
+    };
+
+    const handleApplicationStatusUpdate = () => {
+      // Refresh notifications when application status changes
+      if (isOpen) {
+        fetchNotifications();
+      }
+      fetchUnreadCount();
+    };
+
+    // Add event listeners for WebSocket events
+    window.addEventListener('new-notification', handleNewNotification as EventListener);
+    window.addEventListener('application-status-updated', handleApplicationStatusUpdate);
+    window.addEventListener('application-rejected', handleApplicationStatusUpdate);
+
+    return () => {
+      window.removeEventListener('new-notification', handleNewNotification as EventListener);
+      window.removeEventListener('application-status-updated', handleApplicationStatusUpdate);
+      window.removeEventListener('application-rejected', handleApplicationStatusUpdate);
+    };
+  }, [isOpen, fetchNotifications, fetchUnreadCount]);
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
