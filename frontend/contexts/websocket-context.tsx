@@ -67,12 +67,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     });
 
     // Listen for new notifications
-    newSocket.on('new-notification', (data: any) => {
+    type NewNotificationPayload = { notification?: { title?: string } } & Record<string, unknown>;
+    newSocket.on('new-notification', (data: NewNotificationPayload) => {
       console.log('New notification received:', data);
-      
+      const title = data.notification?.title ?? 'New notification';
       // Show toast notification
       toast.success('🔔 New Notification!', {
-        description: data.notification.title,
+        description: String(title),
         duration: 5000,
         action: {
           label: 'View',
@@ -85,11 +86,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     });
 
     // Listen for application status updates
-    newSocket.on('application-status-updated', (data: any) => {
+    type ApplicationStatusPayload = { status?: string } & Record<string, unknown>;
+    newSocket.on('application-status-updated', (data: ApplicationStatusPayload) => {
       console.log('Application status updated:', data);
-      
+      const status = data.status ?? 'updated';
       toast.info('Application Status Updated', {
-        description: `Application status changed to: ${data.status}`,
+        description: `Application status changed to: ${String(status)}`,
         duration: 4000,
       });
 
@@ -98,15 +100,17 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     });
 
     // Listen for application rejections
-    newSocket.on('application-rejected', (data: any) => {
+    type ApplicationRejectedPayload = { primaryReason?: string; applicationId?: string } & Record<string, unknown>;
+    newSocket.on('application-rejected', (data: ApplicationRejectedPayload) => {
       console.log('Application rejected:', data);
-      
+      const reason = data.primaryReason ?? '';
+      const appId = data.applicationId ?? '';
       toast.error('Application Rejected', {
-        description: `Your application has been rejected. ${data.primaryReason || ''}`,
+        description: `Your application has been rejected. ${String(reason)}`,
         duration: 6000,
         action: {
           label: 'View Details',
-          onClick: () => window.location.href = `/applications/${data.applicationId}`,
+          onClick: () => window.location.href = `/applications/${String(appId)}`,
         },
       });
 
@@ -115,7 +119,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     });
 
     // Listen for AI review progress
-    newSocket.on('ai-review-progress', (data: any) => {
+    type AIReviewPayload = { result?: string } & Record<string, unknown>;
+    newSocket.on('ai-review-progress', (data: AIReviewPayload) => {
       console.log('AI review progress:', data);
       
       const statusMessages: Record<string, string> = {
@@ -125,7 +130,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         'REJECTED': 'AI review completed - application rejected',
       };
 
-      const message = statusMessages[data.result] || `AI review: ${data.result}`;
+      const message = statusMessages[String(data.result)] || `AI review: ${String(data.result)}`;
       
       toast.info('AI Review Update', {
         description: message,

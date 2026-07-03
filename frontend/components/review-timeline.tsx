@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +28,7 @@ interface TimelineEvent {
   feedback?: string;
   score?: number;
   type: 'AI' | 'HUMAN';
-  details?: any;
+  details?: Record<string, unknown> | null;
   errorMessage?: string;
 }
 
@@ -45,12 +45,12 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
   const [autoRefresh, setAutoRefresh] = useState(true);
   const { socket } = useWebSocket();
 
-  const formatLabel = (value: string | undefined | null) => {
+  const formatLabel = useCallback((value: string | undefined | null) => {
     if (!value) return 'Unknown';
     return value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
+  }, []);
 
-  const getStageDisplayName = (stage: string) => {
+  const getStageDisplayName = useCallback((stage: string) => {
     const stageNames: Record<string, string> = {
       'EXTERNAL_IDEA': 'External Idea Review',
       'EXTERNAL_IDEA_REVIEW': 'External Idea Review',
@@ -69,7 +69,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
       'MANUAL_REVIEW': 'Manual Review',
     };
     return stageNames[stage] || formatLabel(stage);
-  };
+  }, [formatLabel]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -101,7 +101,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
     }
   };
 
-  const fetchAIReviewStatus = async () => {
+  const fetchAIReviewStatus = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -111,7 +111,20 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
       
       if (data && data.stages && data.stages.length > 0) {
         // Convert API response to timeline format with proper status mapping
-        const timelineEvents: TimelineEvent[] = data.stages.map((stage: any) => {
+        interface APIStage {
+          id?: string;
+          type?: string;
+          stage?: string;
+          result?: string;
+          processedAt?: string;
+          createdAt?: string;
+          feedback?: string;
+          score?: number;
+          metadata?: Record<string, unknown> | null;
+          errorMessage?: string;
+        }
+
+        const timelineEvents: TimelineEvent[] = data.stages.map((stage: APIStage) => {
           // Map result values to status values
           let status: TimelineEvent['status'] = 'PENDING';
           if (stage.result === 'APPROVED') status = 'APPROVED';
@@ -121,14 +134,14 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
           else if (stage.errorMessage) status = 'ERROR';
 
           return {
-            id: stage.id || `${stage.type}-${Date.now()}`,
-            stage: stage.type || stage.stage,
+            id: stage.id || `${stage.type ?? stage.stage ?? 'unknown'}-${Date.now()}`,
+            stage: (stage.type || stage.stage || 'UNKNOWN_STAGE') as string,
             status,
             timestamp: stage.processedAt || stage.createdAt,
             feedback: stage.feedback,
             score: stage.score,
             type: 'AI' as const,
-            details: stage.metadata,
+            details: stage.metadata || null,
             errorMessage: stage.errorMessage,
           };
         });
@@ -159,7 +172,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
     } finally {
       setLoading(false);
     }
-  };
+  }, [applicationId, currentStatus]);
 
   const generateExpectedStages = (status: string): TimelineEvent[] => {
     const allStages = [
@@ -199,7 +212,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
 
   useEffect(() => {
     fetchAIReviewStatus();
-  }, [applicationId, currentStatus]);
+  }, [fetchAIReviewStatus]);
 
   // Auto-refresh functionality
   useEffect(() => {
@@ -223,7 +236,17 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
   useEffect(() => {
     if (!socket) return;
 
-    const handleAIReviewProgress = (data: any) => {
+    type SocketPayload = {
+      applicationId?: string;
+      stage?: string;
+      type?: string;
+      result?: string;
+      feedback?: string;
+      score?: number;
+      details?: Record<string, unknown> | null;
+    };
+
+    const handleAIReviewProgress = (data: SocketPayload) => {
       if (data.applicationId === applicationId) {
         console.log('Real-time AI review progress update:', data);
         
@@ -248,8 +271,8 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
           } else {
             // Add new stage
             const newEvent: TimelineEvent = {
-              id: `realtime-${data.stage || data.type}-${Date.now()}`,
-              stage: data.stage || data.type,
+              id: `realtime-${data.stage ?? data.type ?? 'unknown'}-${Date.now()}`,
+              stage: String(data.stage || data.type || 'UNKNOWN_STAGE'),
               status: data.result === 'APPROVED' ? 'APPROVED' : 
                      data.result === 'REJECTED' ? 'REJECTED' : 
                      data.result === 'ERROR' ? 'ERROR' : 'IN_PROGRESS',
@@ -272,7 +295,8 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
         
         // Show toast for significant updates
         if (data.result === 'APPROVED' || data.result === 'REJECTED') {
-          toast.info(`${getStageDisplayName(data.stage || data.type)} completed`, {
+          const stageKey = String(data.stage || data.type || 'UNKNOWN_STAGE');
+          toast.info(`${getStageDisplayName(stageKey)} completed`, {
             description: `Result: ${data.result}`,
             duration: 4000,
           });
@@ -280,7 +304,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
       }
     };
 
-    const handleApplicationStatusUpdate = (data: any) => {
+    const handleApplicationStatusUpdate = (data: SocketPayload) => {
       if (data.applicationId === applicationId) {
         console.log('Application status update, refreshing timeline:', data);
         // Refresh timeline when application status changes
@@ -288,7 +312,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
       }
     };
 
-    const handleApplicationRejected = (data: any) => {
+    const handleApplicationRejected = (data: SocketPayload) => {
       if (data.applicationId === applicationId) {
         console.log('Application rejected, refreshing timeline:', data);
         // Mark all pending stages as rejected and refresh
@@ -310,7 +334,7 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
       socket.off('application-status-updated', handleApplicationStatusUpdate);
       socket.off('application-rejected', handleApplicationRejected);
     };
-  }, [socket, applicationId]);
+  }, [socket, applicationId, fetchAIReviewStatus, getStageDisplayName]);
 
   const handleRefresh = () => {
     fetchAIReviewStatus();

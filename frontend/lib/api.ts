@@ -54,6 +54,24 @@ interface NotificationsResponse {
   totalPages: number;
 }
 
+interface AIStage {
+  id?: string;
+  type?: string;
+  stage?: string;
+  result?: string;
+  processedAt?: string;
+  createdAt?: string;
+  feedback?: string;
+  score?: number;
+  metadata?: Record<string, unknown> | null;
+  errorMessage?: string;
+}
+
+interface AIReviewStatus {
+  stages: AIStage[];
+  lastUpdated?: string;
+}
+
 export class ApiClient {
   private static getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -137,7 +155,7 @@ export class ApiClient {
     });
   }
 
-  static async getAIReviewStatus(id: string): Promise<any> {
+  static async getAIReviewStatus(id: string): Promise<AIReviewStatus> {
     const response = await this.fetchWithAuth(`/api/applications/${id}/ai-review-status`);
     return response.json();
   }
