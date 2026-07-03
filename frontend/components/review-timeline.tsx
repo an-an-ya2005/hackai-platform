@@ -125,12 +125,13 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
         }
 
         const timelineEvents: TimelineEvent[] = data.stages.map((stage: APIStage) => {
+          // Map result values to status values
           let status: TimelineEvent['status'] = 'PENDING';
           if (stage.result === 'APPROVED') status = 'APPROVED';
           else if (stage.result === 'REJECTED') status = 'REJECTED';
-          else if (stage.result === 'ERROR') status = 'ERROR';
-          else if (stage.result === 'IN_PROGRESS') status = 'IN_PROGRESS';
+          else if (stage.result === 'PENDING') status = 'PENDING';
           else if (stage.processedAt && stage.result !== 'APPROVED' && stage.result !== 'REJECTED') status = 'IN_PROGRESS';
+          else if (stage.errorMessage) status = 'ERROR';
 
           return {
             id: stage.id || `${stage.type ?? stage.stage ?? 'unknown'}-${Date.now()}`,
@@ -154,33 +155,8 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
         
         setTimeline(timelineEvents);
         setLastUpdated(data.lastUpdated || new Date().toISOString());
-      } else if (data?.liveStatus && Array.isArray(data.liveStatus.reviews) && data.liveStatus.reviews.length > 0) {
-        const liveStatus = data.liveStatus;
-        const liveReviews = liveStatus.reviews ?? [];
-        // Use live AI service progress when DB stage records are not available
-        const liveTimelineEvents: TimelineEvent[] = liveReviews.map((review: any, index: number) => {
-          const status = review.status === 'APPROVED' ? 'APPROVED' :
-            review.status === 'REJECTED' ? 'REJECTED' :
-            review.status === 'ERROR' ? 'ERROR' :
-            review.status === 'IN_PROGRESS' ? 'IN_PROGRESS' :
-            'PENDING';
-
-          return {
-            id: review.id || `${review.type ?? review.stage ?? 'unknown'}-${index}`,
-            stage: String(review.type || review.stage || 'UNKNOWN_STAGE'),
-            status,
-            timestamp: review.processedAt || liveStatus.lastUpdated || undefined,
-            feedback: review.feedback,
-            score: review.score,
-            type: 'AI',
-            details: review.details || null,
-            errorMessage: review.error || review.errorMessage,
-          };
-        });
-
-        setTimeline(liveTimelineEvents);
-        setLastUpdated(liveStatus.lastUpdated || data.lastUpdated || new Date().toISOString());
       } else {
+        // If no AI reviews yet, generate expected stages based on current status
         const expectedStages = generateExpectedStages(currentStatus);
         setTimeline(expectedStages);
         setLastUpdated(new Date().toISOString());
