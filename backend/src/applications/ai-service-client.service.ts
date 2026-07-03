@@ -8,11 +8,14 @@ export class AIServiceClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AIServiceClient.name);
 
   onModuleInit() {
+    const host = process.env.AI_SERVICE_HOST || 'localhost';
+    const port = Number(process.env.AI_SERVICE_PORT || 3003);
+
     this.client = ClientProxyFactory.create({
       transport: Transport.TCP,
       options: {
-        host: 'localhost',
-        port: 3003,
+        host,
+        port,
       },
     });
   }

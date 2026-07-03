@@ -67,8 +67,19 @@ interface AIStage {
   errorMessage?: string;
 }
 
+interface LiveAIReviewStatus {
+  applicationId?: string;
+  currentStatus?: string;
+  progressPercentage?: number;
+  reviews?: AIStage[];
+  category?: string | null;
+  rejectionReason?: string | null;
+  lastUpdated?: string;
+}
+
 interface AIReviewStatus {
   stages: AIStage[];
+  liveStatus?: LiveAIReviewStatus;
   lastUpdated?: string;
 }
 

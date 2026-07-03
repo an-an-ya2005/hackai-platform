@@ -205,6 +205,13 @@ export class ApplicationsService {
           );
         }
       }
+
+      // Trigger AI review when a draft is submitted via update
+      if (updateApplicationDto.status === 'SUBMITTED' && application.status === 'DRAFT') {
+        this.triggerAIReview(updatedApplication.id).catch(error => {
+          console.error(`Failed to trigger AI review for application ${updatedApplication.id}:`, error);
+        });
+      }
     }
 
     return updatedApplication;
@@ -316,8 +323,16 @@ export class ApplicationsService {
         console.log('Could not get live AI service status:', aiServiceError.message);
       }
 
-      // Map AI reviews to timeline format
-      const timeline = aiReviews.map(review => ({
+      const reviewSequence = [
+        'EXTERNAL_IDEA',
+        'INTERNAL_IDEA',
+        'CATEGORIZATION',
+        'IMPLEMENTATION_FEASIBILITY',
+        'COST_ANALYSIS',
+        'CUSTOMER_IMPACT',
+      ];
+
+      const mapDbReview = (review: any) => ({
         id: review.id,
         type: review.type,
         stage: review.type,
@@ -325,19 +340,74 @@ export class ApplicationsService {
         status: review.result,
         score: review.score,
         feedback: review.feedback,
-        processedAt: review.processedAt,
-        createdAt: review.createdAt,
-        updatedAt: review.updatedAt,
+        processedAt: review.processedAt?.toISOString(),
+        createdAt: review.createdAt?.toISOString(),
+        updatedAt: review.updatedAt?.toISOString(),
         metadata: review.metadata,
-        errorMessage: review.errorMessage
-      }));
+        errorMessage: review.errorMessage,
+      });
+
+      const mapLiveReview = (review: any, index: number) => ({
+        id: review.id || `live-${review.type ?? review.stage ?? 'unknown'}-${index}`,
+        type: review.type || review.stage || 'UNKNOWN_STAGE',
+        stage: review.type || review.stage || 'UNKNOWN_STAGE',
+        result: review.status || 'PENDING',
+        status: review.status || 'PENDING',
+        score: review.score,
+        feedback: review.feedback,
+        processedAt: review.processedAt ? new Date(review.processedAt).toISOString() : undefined,
+        createdAt: review.createdAt ? new Date(review.createdAt).toISOString() : review.processedAt ? new Date(review.processedAt).toISOString() : undefined,
+        updatedAt: review.updatedAt ? new Date(review.updatedAt).toISOString() : review.processedAt ? new Date(review.processedAt).toISOString() : undefined,
+        metadata: review.details ?? review.metadata ?? null,
+        errorMessage: review.error || review.errorMessage,
+      });
+
+      const dbTimeline = aiReviews.map(mapDbReview);
+      let timeline = dbTimeline;
+
+      if (dbTimeline.length === 0 && aiServiceStatus?.reviews?.length > 0) {
+        timeline = aiServiceStatus.reviews.map(mapLiveReview);
+      } else if (aiServiceStatus?.reviews?.length > 0) {
+        const liveReviewMap = new Map<string, { review: any; index: number }>();
+        aiServiceStatus.reviews.forEach((review: any, index: number) => {
+          const reviewType = review.type || review.stage;
+          if (reviewType) {
+            liveReviewMap.set(reviewType, { review, index });
+          }
+        });
+
+        timeline = reviewSequence.map((reviewType, index) => {
+          const existing = dbTimeline.find(r => r.type === reviewType);
+          if (existing) return existing;
+
+          const liveEntry = liveReviewMap.get(reviewType);
+          if (liveEntry) {
+            return mapLiveReview(liveEntry.review, liveEntry.index);
+          }
+
+          return {
+            id: `expected-${reviewType}`,
+            type: reviewType,
+            stage: reviewType,
+            result: 'PENDING',
+            status: 'PENDING',
+            score: undefined,
+            feedback: undefined,
+            processedAt: undefined,
+            createdAt: undefined,
+            updatedAt: undefined,
+            metadata: null,
+            errorMessage: undefined,
+          };
+        });
+      }
 
       return {
         applicationId,
         applicationStatus: application.status,
         stages: timeline,
         liveStatus: aiServiceStatus,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
       throw new Error(`Failed to get AI review status: ${error.message}`);

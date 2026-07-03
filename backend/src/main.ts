@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Request, Response } from 'express';
 
 async function bootstrap() {
   // Create app with optimized settings for high concurrency
@@ -13,17 +14,8 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Enable CORS with optimized settings
-  const corsOrigin = configService.get<string>('CORS_ORIGIN');
-  const allowedOrigins = corsOrigin
-    ? corsOrigin.split(',').map((o) => o.trim())
-    : [
-        configService.get('FRONTEND_URL'),
-        'http://127.0.0.1:3000',
-        'http://localhost:3000',
-      ].filter(Boolean);
-
   app.enableCors({
-    origin: allowedOrigins,
+    origin: configService.get('FRONTEND_URL'),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -45,6 +37,12 @@ async function bootstrap() {
 
   // Global prefix
   app.setGlobalPrefix('api');
+
+  // Provide a friendly root route for direct browser access to the backend port
+  app.getHttpAdapter().get('/', (_req: Request, res: Response) => {
+    const frontendUrl = configService.get('FRONTEND_URL') || 'http://localhost:3000';
+    res.redirect(frontendUrl);
+  });
 
   // Swagger/OpenAPI setup (optional)
   const enableDocs = configService.get('ENABLE_API_DOCS') === 'true' || process.env.ENABLE_API_DOCS === 'true';

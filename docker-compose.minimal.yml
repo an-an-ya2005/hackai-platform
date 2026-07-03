@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 81471
+      POSTGRES_PASSWORD: your_postgres_password
       POSTGRES_DB: ai_hackathon
     ports:
       - "5432:5432"
@@ -20,11 +20,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
-      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      DATABASE_URL: postgresql://postgres:your_postgres_password@postgres:5432/ai_hackathon
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
       PORT: 3001
-      FRONTEND_URL: http://127.0.0.1:3000
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:3001
       CORS_ORIGIN: http://127.0.0.1:3000,http://localhost:3000
       NODE_ENV: development
       ENABLE_API_DOCS: "true"
@@ -53,7 +54,7 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: 3002
-      DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
+      DATABASE_URL: postgresql://postgres:your_postgres_password@postgres:5432/ai_hackathon
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       BACKEND_URL: http://backend:3001
       NODE_ENV: development

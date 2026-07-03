@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install all dependencies including dev dependencies for building
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --no-audit --progress=false
 
 # Rebuild the source code only when needed
 FROM node:24-alpine AS builder
@@ -16,9 +16,6 @@ COPY . .
 # Learn more here: https://nextjs.org/telemetry
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED 1
-
-ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:3001
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN npm run build
 

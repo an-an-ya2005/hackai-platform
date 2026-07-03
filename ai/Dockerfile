@@ -2,18 +2,22 @@ FROM node:24-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
+# Copy package files and Prisma schema
+COPY ai/package*.json ./
+COPY ai/prisma ./prisma/
 
 # Install dependencies with legacy peer deps to handle conflicts
 RUN npm ci --legacy-peer-deps
 
+# Add curl for healthcheck support
+RUN apk add --no-cache curl
+
 # Generate Prisma client
 RUN npx prisma generate
 
-# Copy source code
-COPY . .
+# Copy AI source code and the MCP server into the image
+COPY ai .
+COPY mcp-server /mcp-server
 
 # Build the application
 RUN npm run build

@@ -6,8 +6,13 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  getHello() {
+    return {
+      message: this.appService.getHello(),
+      status: 'ok',
+      frontend: 'http://localhost:3000',
+      health: '/api/health',
+    };
   }
 
   @Get('health')

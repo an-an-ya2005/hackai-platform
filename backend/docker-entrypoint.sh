@@ -1,25 +1,43 @@
 #!/bin/sh
+set -eu
 
-# Wait for database to be ready
+# Wait for database to be ready using node
 echo "Waiting for PostgreSQL to be ready..."
-npx wait-on tcp:postgres:5432 -t 30000
+until node -e "
+const net = require('net');
+const client = new net.Socket();
+client.connect(5432, 'postgres', () => { client.destroy(); process.exit(0); });
+client.on('error', () => { client.destroy(); process.exit(1); });
+" 2>/dev/null; do
+  echo "PostgreSQL not ready yet, retrying in 2 seconds..."
+  sleep 2
+done
+echo "PostgreSQL is ready!"
 
-# Run database migrations
-echo "Running database migrations..."
-npx prisma migrate deploy
-
-# Generate Prisma client (in case it's needed)
-echo "Generating Prisma client..."
-npx prisma generate
-
-# Seed the database (optional, skip if seed tooling unavailable in production image)
-if [ "$NODE_ENV" = "development" ] || [ "$SEED_DATABASE" = "true" ]; then
-  echo "Seeding database..."
-  if npx ts-node --transpile-only --compiler-options '{"module":"CommonJS","moduleResolution":"node"}' prisma/seed.ts; then
-    echo "Database seeded successfully."
+if [ "${SKIP_DB_SETUP:-false}" != "true" ]; then
+  if [ ! -f /app/.prisma-migrations-applied ]; then
+    echo "Running database migrations..."
+    npx prisma migrate deploy
+    touch /app/.prisma-migrations-applied
   else
-    echo "Skipping seed (seed tooling unavailable or data already exists)."
+    echo "Database migrations already applied; skipping."
   fi
+
+  if [ ! -f /app/.prisma-client-generated ]; then
+    echo "Generating Prisma client..."
+    npx prisma generate
+    touch /app/.prisma-client-generated
+  else
+    echo "Prisma client already generated; skipping."
+  fi
+else
+  echo "Skipping DB setup."
+fi
+
+# Seed the database (optional)
+if [ "${SEED_DATABASE:-}" = "true" ]; then
+  echo "Seeding database..."
+  npm run db:seed || echo "Seed failed, continuing..."
 fi
 
 # Start the application
