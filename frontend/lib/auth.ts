@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://127.0.0.1:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
 export interface User {
   id: string;
@@ -73,7 +73,8 @@ class AuthService {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch profile');
+      const errorText = await response.text().catch(() => 'No response body');
+      throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     return response.json();

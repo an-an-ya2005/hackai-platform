@@ -20,9 +20,7 @@ async function bootstrap() {
       .map((origin: string) => origin.trim())
       .filter(Boolean),
     'http://localhost:3000',
-    'http://localhost:3004',
     'http://127.0.0.1:3000',
-    'http://127.0.0.1:3004',
   ];
 
   const isAllowedOrigin = (requestOrigin: string | undefined): boolean => {
