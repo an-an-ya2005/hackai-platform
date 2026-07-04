@@ -14,18 +14,39 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Enable CORS with optimized settings
-  const frontendOrigins = (configService.get('CORS_ORIGIN') || configService.get('FRONTEND_URL') || '')
-    .split(',')
-    .map((origin: string) => origin.trim())
-    .filter(Boolean);
+  const frontendOrigins = [
+    ...(configService.get('CORS_ORIGIN') || configService.get('FRONTEND_URL') || '')
+      .split(',')
+      .map((origin: string) => origin.trim())
+      .filter(Boolean),
+    'http://localhost:3000',
+    'http://localhost:3004',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3004',
+  ];
+
+  const isAllowedOrigin = (requestOrigin: string | undefined): boolean => {
+    if (!requestOrigin) {
+      return true;
+    }
+
+    if (frontendOrigins.includes(requestOrigin)) {
+      return true;
+    }
+
+    return frontendOrigins.some((allowedOrigin) => {
+      if (!allowedOrigin.includes('*')) {
+        return false;
+      }
+
+      const pattern = new RegExp(`^${allowedOrigin.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+      return pattern.test(requestOrigin);
+    });
+  };
 
   app.enableCors({
     origin: (requestOrigin, callback) => {
-      if (!requestOrigin) {
-        return callback(null, true); // allow non-browser requests like Postman
-      }
-
-      if (frontendOrigins.includes(requestOrigin)) {
+      if (isAllowedOrigin(requestOrigin)) {
         return callback(null, true);
       }
 
