@@ -53,16 +53,22 @@ tryUrl(0);
   if [ "${SKIP_DB_SETUP:-false}" != "true" ]; then
     if [ ! -f /app/.prisma-migrations-applied ]; then
       echo "Background: running database migrations..."
-      npx prisma migrate deploy || echo "Background: migrate failed, continuing..."
-      touch /app/.prisma-migrations-applied
+      if npx prisma migrate deploy; then
+        touch /app/.prisma-migrations-applied
+      else
+        echo "Background: migrate failed; will retry on next deploy."
+      fi
     else
       echo "Background: database migrations already applied; skipping."
     fi
 
     if [ ! -f /app/.prisma-client-generated ]; then
       echo "Background: generating Prisma client..."
-      npx prisma generate || echo "Background: prisma generate failed, continuing..."
-      touch /app/.prisma-client-generated
+      if npx prisma generate; then
+        touch /app/.prisma-client-generated
+      else
+        echo "Background: prisma generate failed, continuing..."
+      fi
     else
       echo "Background: Prisma client already generated; skipping."
     fi
