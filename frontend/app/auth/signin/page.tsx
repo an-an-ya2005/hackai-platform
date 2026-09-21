@@ -18,7 +18,7 @@ import {
 
 export default function SignInPage() {
   const router = useRouter();
-  const { login, loginWithGithub, isLoading } = useAuth();
+  const { login, loginWithGithub, loginWithGoogle, isLoading } = useAuth();
   
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
@@ -48,7 +48,7 @@ export default function SignInPage() {
   };
 
   const handleGoogleSignIn = () => {
-    toast.info("Google sign-in coming soon!");
+    loginWithGoogle();
   };
 
   return (
@@ -251,11 +251,11 @@ export default function SignInPage() {
                   <Button
                     variant="outline"
                     onClick={handleGoogleSignIn}
-                    disabled={true}
-                    className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200 opacity-50 cursor-not-allowed"
+                    disabled={isLoading}
+                    className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
                   >
                     <Mail className="mr-2 h-4 w-4" />
-                    Google (Coming Soon)
+                    Google
                   </Button>
                 </div>
 

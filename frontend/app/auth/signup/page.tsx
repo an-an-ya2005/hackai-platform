@@ -18,7 +18,7 @@ import {
 
 export default function SignUpPage() {
   const router = useRouter();
-  const { register, loginWithGithub, isLoading } = useAuth();
+  const { register, loginWithGithub, loginWithGoogle, isLoading } = useAuth();
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -65,7 +65,7 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = () => {
-    toast.info("Google sign-up coming soon!");
+    loginWithGoogle();
   };
 
   const updateFormData = (field: string, value: string | boolean) => {
@@ -176,11 +176,11 @@ export default function SignUpPage() {
                   <Button
                     variant="outline"
                     onClick={handleGoogleSignUp}
-                    disabled={true}
-                    className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200 opacity-50 cursor-not-allowed"
+                    disabled={isLoading}
+                    className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
                   >
                     <Mail className="mr-2 h-4 w-4" />
-                    Google (Coming Soon)
+                    Google
                   </Button>
                 </div>
 
