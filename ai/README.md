@@ -25,7 +25,7 @@ Only a well-supported duplicate, a clearly demonstrated problem/solution mismatc
 ## Architecture
 
 - **Microservice Design**: Runs independently from the main backend
-- **TCP Communication**: Uses NestJS microservices for inter-service communication
+- **HTTP Communication**: Receives authenticated review requests from the backend
 - **Database Integration**: Shares the same database as the main application
 - **Asynchronous Processing**: Reviews are processed in the background
 
@@ -49,7 +49,10 @@ Only a well-supported duplicate, a clearly demonstrated problem/solution mismatc
 DATABASE_URL=postgresql://...
 PORT=3002
 NODE_ENV=development
+AI_SERVICE_API_KEY=replace_with_a_long_random_shared_secret
 ```
+
+The backend communicates with the AI service over HTTP. Configure the same `AI_SERVICE_API_KEY` on both services; review, status, feedback, and retry endpoints require this key. The health endpoint is public for service health checks. On Render, configure the backend's `AI_SERVICE_URL` with this service's public HTTPS URL.
 
 ## Installation & Setup
 
@@ -70,14 +73,14 @@ npx prisma generate
 npm run start:dev
 ```
 
-The AI service will run on port 3002 (HTTP) and 3003 (microservice).
+The AI service runs on port 3002 (HTTP).
 
 ## Integration with Backend
 
 The main backend automatically triggers AI reviews when applications are submitted:
 
 1. User submits application → Backend updates status to `SUBMITTED`
-2. Backend sends message to AI service via TCP microservice
+2. Backend sends an authenticated HTTP request to the AI service
 3. AI service processes application through review pipeline
 4. Each stage updates application status and creates AI review records
 5. Final result is either `UNDER_REVIEW` (for manual review) or `REJECTED`

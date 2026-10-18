@@ -11,6 +11,7 @@ import { CostReviewService } from './cost-review.service';
 import { CustomerImpactReviewService } from './customer-impact-review.service';
 import { WebSocketClient } from '../websocket/websocket-client.service';
 import { MCPClientService } from '../mcp/mcp-client.service';
+import { AIServiceKeyGuard } from '../common/guards/ai-service-key.guard';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { MCPClientService } from '../mcp/mcp-client.service';
     CustomerImpactReviewService,
     WebSocketClient,
     MCPClientService,
+    AIServiceKeyGuard,
   ],
   exports: [AIReviewOrchestratorService],
 })

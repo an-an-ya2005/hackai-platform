@@ -24,8 +24,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
       PORT: 3001
-      AI_SERVICE_HOST: ai
-      AI_SERVICE_PORT: 3003
+      AI_SERVICE_URL: http://ai:3002
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:-local-ai-service-key}
       FRONTEND_URL: http://localhost:3000
       BACKEND_URL: http://localhost:3001
       CORS_ORIGIN: http://127.0.0.1:3000,http://localhost:3000
@@ -56,6 +56,7 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: 3002
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:-local-ai-service-key}
       DATABASE_URL: postgresql://postgres:81471@postgres:5432/ai_hackathon
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       BACKEND_URL: http://backend:3001
@@ -67,7 +68,6 @@ services:
         condition: service_healthy
     ports:
       - "3002:3002"
-      - "3003:3003"
 
   frontend:
     build:

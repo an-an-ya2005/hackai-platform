@@ -1,6 +1,6 @@
-import { Controller, Post, Get, Param, Body, Logger } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { Controller, Post, Get, Param, Logger, UseGuards } from '@nestjs/common';
 import { AIReviewOrchestratorService } from './ai-review-orchestrator.service';
+import { AIServiceKeyGuard } from '../common/guards/ai-service-key.guard';
 
 @Controller('ai-review')
 export class AIReviewController {
@@ -10,57 +10,41 @@ export class AIReviewController {
     private readonly aiReviewOrchestratorService: AIReviewOrchestratorService,
   ) {}
 
-  // HTTP endpoint for manual triggering (for testing)
   @Post('process/:applicationId')
+  @UseGuards(AIServiceKeyGuard)
   async processApplication(@Param('applicationId') applicationId: string) {
     this.logger.log(`Received request to process application ${applicationId}`);
-    await this.aiReviewOrchestratorService.processApplicationReview(applicationId);
+    void this.aiReviewOrchestratorService
+      .processApplicationReview(applicationId)
+      .catch((error) => {
+        this.logger.error(
+          `Failed to process application ${applicationId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
     return { message: 'Application review started', applicationId };
   }
 
-  // Microservice pattern for backend communication
-  @MessagePattern('process_application_review')
-  async handleApplicationSubmission(@Payload() data: { applicationId: string }) {
-    this.logger.log(`Received microservice request to process application ${data.applicationId}`);
-    await this.aiReviewOrchestratorService.processApplicationReview(data.applicationId);
-    return { message: 'Application review completed', applicationId: data.applicationId };
-  }
-
-  @MessagePattern('get_review_status')
-  async handleGetReviewStatus(@Payload() data: { applicationId: string }) {
-    this.logger.log(`Received microservice request to get review status for ${data.applicationId}`);
-    return await this.aiReviewOrchestratorService.getReviewStatus(data.applicationId);
-  }
-
-  @MessagePattern('retry_review')
-  async handleRetryReview(@Payload() data: { applicationId: string; reviewType: string }) {
-    this.logger.log(`Received microservice request to retry ${data.reviewType} review for ${data.applicationId}`);
-    await this.aiReviewOrchestratorService.retryFailedReview(data.applicationId, data.reviewType);
-    return { message: 'Review retry completed', applicationId: data.applicationId, reviewType: data.reviewType };
-  }
-
-  @MessagePattern('get_application_feedback')
-  async handleGetApplicationFeedback(@Payload() data: { applicationId: string }) {
-    this.logger.log(`Received microservice request to get feedback for ${data.applicationId}`);
-    return await this.aiReviewOrchestratorService.getFeedbackForFrontend(data.applicationId);
-  }
-
   @Get('status/:applicationId')
+  @UseGuards(AIServiceKeyGuard)
   async getReviewStatus(@Param('applicationId') applicationId: string) {
     return await this.aiReviewOrchestratorService.getReviewStatus(applicationId);
   }
 
   @Get('report/:applicationId')
+  @UseGuards(AIServiceKeyGuard)
   async getDetailedReport(@Param('applicationId') applicationId: string) {
     return await this.aiReviewOrchestratorService.getDetailedReviewReport(applicationId);
   }
 
   @Get('feedback/:applicationId')
+  @UseGuards(AIServiceKeyGuard)
   async getFeedbackForFrontend(@Param('applicationId') applicationId: string) {
     return await this.aiReviewOrchestratorService.getFeedbackForFrontend(applicationId);
   }
 
   @Post('retry/:applicationId/:reviewType')
+  @UseGuards(AIServiceKeyGuard)
   async retryReview(
     @Param('applicationId') applicationId: string,
     @Param('reviewType') reviewType: string,

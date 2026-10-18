@@ -104,9 +104,10 @@ For manual startup, configure environment variables such as:
 - `GITHUB_CLIENT_SECRET`
 - `NEXT_PUBLIC_API_URL`
 - `GEMINI_API_KEY`
-- `AI_SERVICE_HOST` — hostname the backend uses to reach the AI service (defaults to `localhost` for manual local development)
+- `AI_SERVICE_URL` — AI service HTTP base URL (defaults to `http://localhost:3002`)
+- `AI_SERVICE_API_KEY` — shared secret configured on both the backend and AI service
 
-When deploying the backend and AI service separately, set `AI_SERVICE_HOST` to the AI service's private hostname and `AI_SERVICE_PORT` to its TCP port (default `3003`). Do not use `localhost` for a separate service. The AI service must expose the TCP listener on port `3003`; its HTTP health endpoint on port `3002` is separate.
+The backend calls the AI service over HTTP. Locally, `AI_SERVICE_URL` defaults to `http://localhost:3002`; in Docker Compose it uses `http://ai:3002`. For separate Render deployments, set the backend's `AI_SERVICE_URL` to the AI service's public HTTPS URL. Set the same long, random `AI_SERVICE_API_KEY` on both the backend and AI services; the AI service requires it for review, status, feedback, and retry endpoints. This allows the services to communicate on free web-service plans without a private TCP listener. The AI health endpoint remains public for health checks.
 
 For Google sign-in deployments, set `ADMIN_EMAIL` on the backend to the email address that should receive the `ADMIN` role. The Admin option on the sign-in and sign-up forms uses Google only, and the account receives Admin access only when Google confirms this configured email. Other Google accounts receive the `PARTICIPANT` role. Admin accounts cannot be created through the unverified email/password form; no admin password is needed.
 
