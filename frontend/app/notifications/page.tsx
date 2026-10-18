@@ -97,7 +97,7 @@ function NotificationsContent() {
   // Auto-adjust page if current page is out of bounds after filtering
   useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
-      setCurrentPage(Math.max(1, totalPages));
+      void Promise.resolve().then(() => setCurrentPage(Math.max(1, totalPages)));
     }
   }, [totalPages, currentPage]);
 
@@ -144,7 +144,7 @@ function NotificationsContent() {
 
   // Initial fetch when component mounts
   useEffect(() => {
-    fetchAllNotifications();
+    void Promise.resolve().then(fetchAllNotifications);
   }, []);
 
   const handleMarkAsRead = async (id: string) => {

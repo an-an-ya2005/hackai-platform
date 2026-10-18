@@ -54,7 +54,7 @@ function DashboardContent() {
   };
 
   useEffect(() => {
-    fetchApplications();
+    void Promise.resolve().then(fetchApplications);
   }, []);
 
   // Listen for real-time application updates via WebSocket

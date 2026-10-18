@@ -49,12 +49,12 @@ export class AIReviewOrchestratorService {
     } catch (error) {
       this.logger.error(`Error processing application review for ${applicationId}:`, error);
       
-      // Update application status to indicate AI review failure
+      // A processing failure is not an evaluation decision; preserve the application for admin review.
       await this.databaseService.application.update({
         where: { id: applicationId },
         data: {
-          status: 'REJECTED',
-          rejectionReason: `AI review system error: ${error.message}`,
+          status: 'UNDER_REVIEW',
+          rejectionReason: null,
         },
       });
     }
@@ -79,6 +79,7 @@ export class AIReviewOrchestratorService {
       
       if (afterExternal?.status === 'REJECTED') {
         this.logger.log(`Application ${applicationId} rejected in external idea review`);
+        await this.notifyAdminsOfAIRejection(applicationId);
         return;
       }
 
@@ -91,6 +92,7 @@ export class AIReviewOrchestratorService {
       
       if (afterInternal?.status === 'REJECTED') {
         this.logger.log(`Application ${applicationId} rejected in internal idea review`);
+        await this.notifyAdminsOfAIRejection(applicationId);
         return;
       }
 
@@ -144,6 +146,59 @@ export class AIReviewOrchestratorService {
     } catch (error) {
       this.logger.error(`Error in review pipeline for application ${applicationId}:`, error);
       throw error;
+    }
+  }
+
+  private async notifyAdminsOfAIRejection(applicationId: string): Promise<void> {
+    try {
+      const application = await this.databaseService.application.findUnique({
+        where: { id: applicationId },
+        include: {
+          user: { select: { name: true } },
+          aiReviews: {
+            where: { result: 'REJECTED' },
+            orderBy: { processedAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+
+      if (!application) {
+        throw new Error(`Application ${applicationId} not found while notifying admins`);
+      }
+
+      const admins = await this.databaseService.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { id: true },
+      });
+      const rejectionFeedback = application.aiReviews[0]?.feedback
+        ?? application.rejectionReason
+        ?? 'AI review rejected this application.';
+
+      if (admins.length === 0) {
+        this.logger.warn(`No administrators found to notify about rejected application ${applicationId}`);
+        return;
+      }
+
+      await this.databaseService.notification.createMany({
+        data: admins.map((admin) => ({
+          type: 'APPLICATION_REVIEW_COMPLETED',
+          title: 'AI review rejected an application',
+          message: `${application.user.name}'s application "${application.title}" was rejected by AI review. ${rejectionFeedback}`,
+          userId: admin.id,
+          actionUrl: `/admin/applications/${applicationId}`,
+          metadata: {
+            applicationId,
+            status: 'REJECTED',
+            rejectionFeedback,
+          },
+        })),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to notify admins about rejected application ${applicationId}; rejection remains in effect`,
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 
@@ -250,6 +305,14 @@ export class AIReviewOrchestratorService {
           break;
         default:
           throw new Error(`Unknown review type: ${reviewType}`);
+      }
+
+      const application = await this.databaseService.application.findUnique({
+        where: { id: applicationId },
+        select: { status: true },
+      });
+      if (application?.status === 'REJECTED') {
+        await this.notifyAdminsOfAIRejection(applicationId);
       }
 
     } catch (error) {

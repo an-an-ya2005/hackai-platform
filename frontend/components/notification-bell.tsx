@@ -159,9 +159,9 @@ export function NotificationBell() {
 
   // Initial load and polling/focus/event listeners (moved after function declarations)
   useEffect(() => {
-    fetchUnreadCount();
+    void Promise.resolve().then(fetchUnreadCount);
     if (isOpen) {
-      fetchNotifications();
+      void Promise.resolve().then(fetchNotifications);
     }
   }, [isOpen, fetchUnreadCount, fetchNotifications]);
 

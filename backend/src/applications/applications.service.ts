@@ -73,7 +73,7 @@ export class ApplicationsService {
 
   async findAll(page: number = 1, limit: number = 10, status?: string) {
     const skip = (page - 1) * limit;
-    const where = status ? { status: status as any } : {};
+    const where = status ? { status: status as any, isActive: true } : { isActive: true };
     
     const [applications, total] = await Promise.all([
       this.databaseService.application.findMany({
@@ -104,10 +104,11 @@ export class ApplicationsService {
 
   async findUserApplications(userId: string, page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
+    const where = { userId, isActive: true };
     
     const [applications, total] = await Promise.all([
       this.databaseService.application.findMany({
-        where: { userId },
+        where,
         skip,
         take: limit,
         include: {
@@ -120,7 +121,7 @@ export class ApplicationsService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.databaseService.application.count({ where: { userId } }),
+      this.databaseService.application.count({ where }),
     ]);
 
     return {
@@ -145,7 +146,7 @@ export class ApplicationsService {
       },
     });
 
-    if (!application) {
+    if (!application || !application.isActive) {
       throw new NotFoundException('Application not found');
     }
 
@@ -157,6 +158,44 @@ export class ApplicationsService {
 
     if (application.userId !== userId && userRole !== 'ADMIN') {
       throw new ForbiddenException('You can only update your own applications');
+    }
+
+    if (userRole !== 'ADMIN') {
+      const applicationChanges = { ...updateApplicationDto };
+      delete applicationChanges.status;
+      const updatedApplication = await this.databaseService.$transaction(async (transaction) => {
+        await transaction.aIReview.deleteMany({ where: { applicationId: id } });
+        await transaction.review.deleteMany({ where: { applicationId: id } });
+
+        return transaction.application.update({
+          where: { id },
+          data: {
+            ...applicationChanges,
+            status: 'DRAFT',
+            submittedAt: null,
+            category: null,
+            rejectionReason: null,
+          },
+          include: {
+            user: true,
+            reviews: {
+              include: {
+                reviewer: true,
+              },
+            },
+          },
+        });
+      });
+
+      if (application.status !== 'DRAFT') {
+        await this.notificationsService.createApplicationStatusNotification(
+          id,
+          application.userId,
+          'DRAFT',
+        );
+      }
+
+      return updatedApplication;
     }
 
     // Check if status is being updated
@@ -182,11 +221,17 @@ export class ApplicationsService {
     // If status changed, create notifications
     if (isStatusUpdate && updateApplicationDto.status) {
       // ALWAYS notify the applicant about status changes on their own application
-      await this.notificationsService.createApplicationStatusNotification(
+      const notification = await this.notificationsService.createApplicationStatusNotification(
         id,
         application.userId,
         updateApplicationDto.status,
         userRole === 'ADMIN' ? userId : undefined,
+      );
+      this.applicationStatusGateway.sendNotification(application.userId, notification);
+      this.applicationStatusGateway.sendApplicationStatusUpdate(
+        application.userId,
+        id,
+        updateApplicationDto.status,
       );
 
       // If a draft application is being submitted by the user, notify all admins
@@ -242,11 +287,17 @@ export class ApplicationsService {
     if (currentApplication.status !== status) {
       // ALWAYS notify the applicant about status changes on their own application
       // This ensures they get updates regardless of who made the change (admin or themselves)
-      await this.notificationsService.createApplicationStatusNotification(
+      const notification = await this.notificationsService.createApplicationStatusNotification(
         id,
         currentApplication.userId,
         status,
         adminUserId,
+      );
+      this.applicationStatusGateway.sendNotification(currentApplication.userId, notification);
+      this.applicationStatusGateway.sendApplicationStatusUpdate(
+        currentApplication.userId,
+        id,
+        status,
       );
 
       // If a new application is submitted by a user (DRAFT -> SUBMITTED), notify all admins
@@ -277,8 +328,9 @@ export class ApplicationsService {
       throw new ForbiddenException('You can only delete your own applications');
     }
 
-    return this.databaseService.application.delete({
+    return this.databaseService.application.update({
       where: { id },
+      data: { isActive: false },
     });
   }
 

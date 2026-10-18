@@ -37,6 +37,42 @@ interface ReviewTimelineProps {
   currentStatus: string;
 }
 
+function generateExpectedStages(status: string): TimelineEvent[] {
+  const allStages = [
+    { stage: 'EXTERNAL_IDEA', order: 1 },
+    { stage: 'INTERNAL_IDEA', order: 2 },
+    { stage: 'CATEGORIZATION', order: 3 },
+    { stage: 'IMPLEMENTATION_FEASIBILITY', order: 4 },
+    { stage: 'COST_ANALYSIS', order: 5 },
+    { stage: 'CUSTOMER_IMPACT', order: 6 },
+  ];
+
+  const statusToOrder: Record<string, number> = {
+    'DRAFT': 0,
+    'SUBMITTED': 1,
+    'EXTERNAL_IDEA_REVIEW': 1,
+    'INTERNAL_IDEA_REVIEW': 2,
+    'CATEGORIZATION': 3,
+    'IMPLEMENTATION_REVIEW': 4,
+    'COST_REVIEW': 5,
+    'IMPACT_REVIEW': 6,
+    'UNDER_REVIEW': 7,
+    'ACCEPTED': 7,
+    'REJECTED': -1,
+  };
+
+  const currentOrder = statusToOrder[status] || 0;
+
+  return allStages.map((stageInfo) => ({
+    id: `expected-${stageInfo.stage}`,
+    stage: stageInfo.stage,
+    status: stageInfo.order < currentOrder ? 'APPROVED' as const :
+            stageInfo.order === currentOrder ? 'IN_PROGRESS' as const : 'PENDING' as const,
+    type: 'AI' as const,
+    timestamp: stageInfo.order < currentOrder ? new Date().toISOString() : undefined,
+  }));
+}
+
 export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineProps) {
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,44 +210,8 @@ export function ReviewTimeline({ applicationId, currentStatus }: ReviewTimelineP
     }
   }, [applicationId, currentStatus]);
 
-  const generateExpectedStages = (status: string): TimelineEvent[] => {
-    const allStages = [
-      { stage: 'EXTERNAL_IDEA', order: 1 },
-      { stage: 'INTERNAL_IDEA', order: 2 },
-      { stage: 'CATEGORIZATION', order: 3 },
-      { stage: 'IMPLEMENTATION_FEASIBILITY', order: 4 },
-      { stage: 'COST_ANALYSIS', order: 5 },
-      { stage: 'CUSTOMER_IMPACT', order: 6 },
-    ];
-
-    const statusToOrder: Record<string, number> = {
-      'DRAFT': 0,
-      'SUBMITTED': 1,
-      'EXTERNAL_IDEA_REVIEW': 1,
-      'INTERNAL_IDEA_REVIEW': 2,
-      'CATEGORIZATION': 3,
-      'IMPLEMENTATION_REVIEW': 4,
-      'COST_REVIEW': 5,
-      'IMPACT_REVIEW': 6,
-      'UNDER_REVIEW': 7,
-      'ACCEPTED': 7,
-      'REJECTED': -1,
-    };
-
-    const currentOrder = statusToOrder[status] || 0;
-    
-    return allStages.map((stageInfo) => ({
-      id: `expected-${stageInfo.stage}`,
-      stage: stageInfo.stage,
-      status: stageInfo.order < currentOrder ? 'APPROVED' as const :
-              stageInfo.order === currentOrder ? 'IN_PROGRESS' as const : 'PENDING' as const,
-      type: 'AI' as const,
-      timestamp: stageInfo.order < currentOrder ? new Date().toISOString() : undefined,
-    }));
-  };
-
   useEffect(() => {
-    fetchAIReviewStatus();
+    void Promise.resolve().then(fetchAIReviewStatus);
   }, [fetchAIReviewStatus]);
 
   // Auto-refresh functionality

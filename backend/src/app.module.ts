@@ -10,6 +10,7 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { WebSocketModule } from './websocket/websocket.module';
 import { HealthController } from './health/health.controller';
+import { BrochureModule } from './brochure/brochure.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { HealthController } from './health/health.controller';
     ReviewsModule,
     NotificationsModule,
     WebSocketModule,
+    BrochureModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],

@@ -5,6 +5,15 @@ import { join } from 'path';
 export interface MCPAnalysisResult {
   isSimilar: boolean;
   similarityScore: number;
+  companyMatchVerified?: boolean;
+  rejectionType?: 'CLEAR_DUPLICATE' | 'PROBLEM_SOLUTION_MISMATCH' | 'NONE';
+  ideaMeritDecision?: 'CLEARLY_LOW_VALUE' | 'REVIEW' | 'SUBSTANTIVE';
+  ideaMeritConfidence?: number;
+  ideaMeritReason?: string;
+  problemSimilarity?: number;
+  solutionSimilarity?: number;
+  problemSolutionFit?: number;
+  mismatchConfidence?: number;
   mostSimilarCompany?: {
     name: string;
     reason: string;
@@ -35,6 +44,8 @@ export class MCPClientService {
     userApplication: {
       title: string;
       description: string;
+      problemStatement: string;
+      proposedSolution: string;
       targetMarket?: string;
       businessModel?: string;
     },
@@ -81,8 +92,12 @@ export class MCPClientService {
       return {
         isSimilar: false,
         similarityScore: 0,
+        rejectionType: 'NONE',
+        ideaMeritDecision: 'REVIEW',
+        ideaMeritConfidence: 0,
+        ideaMeritReason: 'The analysis failed; administrator review is required.',
         recommendation: 'APPROVE',
-        feedback: 'Unable to complete similarity analysis. Manual review recommended.',
+        feedback: 'Unable to complete similarity analysis. Administrator review is required.',
         error: true,
         message: error.message
       };
@@ -125,17 +140,7 @@ export class MCPClientService {
 
     } catch (error) {
       this.logger.error('Error fetching YC companies:', error);
-      
-      // Return fallback mock data
-      return [
-        {
-          name: "CircuitHub",
-          oneLiner: "On-Demand Electronics Manufacturing",
-          description: "CircuitHub offers on-demand electronics manufacturing powered by our factory-scale robotics platform, The Grid.",
-          tags: ["Hard Tech", "Hardware", "Robotics"],
-          industry: "Industrials"
-        }
-      ];
+      return [];
     }
   }
 

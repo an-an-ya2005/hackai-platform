@@ -27,7 +27,8 @@ import {
   User,
   Settings,
   ChevronDown,
-  Bell
+  Bell,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
@@ -66,6 +67,12 @@ const navItems: NavItem[] = [
     roles: ["PARTICIPANT"], // Only participants get notifications
   },
   {
+    title: "Brochure",
+    href: "/brochure",
+    icon: <Download className="h-4 w-4" />,
+    roles: ["PARTICIPANT"],
+  },
+  {
     title: "Admin Panel",
     href: "/admin",
     icon: <Users className="h-4 w-4" />,
@@ -92,7 +99,7 @@ export function Navigation() {
     (item) => !item.roles || (user && item.roles.includes(user.role))
   );
 
-  const NavLinks = ({ isMobile = false }) => (
+  const renderNavLinks = (isMobile = false) => (
     <>
       {filteredNavItems.map((item) => (
         <Link
@@ -151,7 +158,7 @@ export function Navigation() {
 
           {/* Enhanced Desktop Navigation */}
           <div className="hidden md:flex items-center gap-2">
-            <NavLinks />
+            {renderNavLinks()}
             {/* About Link */}
             <Link
               href="/about"
@@ -287,7 +294,7 @@ export function Navigation() {
                     {/* Mobile Navigation */}
                     <div className="flex-1 overflow-y-auto p-6">
                       <div className="space-y-2">
-                        <NavLinks isMobile />
+                        {renderNavLinks(true)}
                         <Link
                           href="/about"
                           onClick={() => setIsOpen(false)}

@@ -64,11 +64,12 @@ export class InternalIdeaReviewService {
         // Sort by similarity score and get the best one
         const bestSimilar = similarIdeas[0];
         
-        if (bestSimilar.similarity > 0.8) {
-          feedback = `Similar idea found in internal applications. `;
+        if (bestSimilar.problemSimilarity >= 0.85 && bestSimilar.solutionSimilarity >= 0.85) {
+          feedback = `A likely duplicate was found in internal applications. `;
           feedback += `Most similar application: "${bestSimilar.title}" by ${bestSimilar.user.name} `;
-          feedback += `(${Math.round(bestSimilar.similarity * 100)}% similarity). `;
-          feedback += `This application is rejected in favor of the earlier submission.`;
+          feedback += `(problem similarity: ${Math.round(bestSimilar.problemSimilarity * 100)}%; `;
+          feedback += `solution similarity: ${Math.round(bestSimilar.solutionSimilarity * 100)}%). `;
+          feedback += `This idea has already been submitted. Please choose a different idea and submit again.`;
           
           await this.databaseService.aIReview.update({
             where: { id: aiReview.id },
@@ -141,7 +142,7 @@ export class InternalIdeaReviewService {
           type: 'INTERNAL_IDEA',
         },
         data: {
-          result: 'REJECTED',
+          result: 'PENDING',
           errorMessage: error.message,
           processedAt: new Date(),
         },
@@ -153,41 +154,25 @@ export class InternalIdeaReviewService {
     const similarities: any[] = [];
 
     for (const otherApp of otherApps) {
-      const similarity = this.calculateSimilarity(currentApp, otherApp);
+      const problemSimilarity = this.calculateTextSimilarity(
+        `${currentApp.problemStatement} ${currentApp.description}`,
+        `${otherApp.problemStatement} ${otherApp.description}`,
+      );
+      const solutionSimilarity = this.calculateTextSimilarity(currentApp.solution, otherApp.solution);
+      const similarity = (problemSimilarity + solutionSimilarity) / 2;
       
       if (similarity > 0.3) { // Only consider if similarity is above 30%
         similarities.push({
           ...otherApp,
           similarity,
+          problemSimilarity,
+          solutionSimilarity,
         });
       }
     }
 
     // Sort by similarity score (highest first)
     return similarities.sort((a, b) => b.similarity - a.similarity);
-  }
-
-  private calculateSimilarity(app1: any, app2: any): number {
-    // Simple similarity calculation based on text comparison
-    // In a real implementation, you might use more sophisticated NLP techniques
-    
-    const text1 = `${app1.title} ${app1.description} ${app1.problemStatement} ${app1.solution}`.toLowerCase();
-    const text2 = `${app2.title} ${app2.description} ${app2.problemStatement} ${app2.solution}`.toLowerCase();
-    
-    // Extract keywords and calculate overlap
-    const words1 = this.extractKeywords(text1);
-    const words2 = this.extractKeywords(text2);
-    
-    const intersection = words1.filter(word => words2.includes(word));
-    const union = [...new Set([...words1, ...words2])];
-    
-    const jaccardSimilarity = intersection.length / union.length;
-    
-    // Also check for title similarity
-    const titleSimilarity = this.calculateTextSimilarity(app1.title.toLowerCase(), app2.title.toLowerCase());
-    
-    // Weighted average: 60% content similarity, 40% title similarity
-    return jaccardSimilarity * 0.6 + titleSimilarity * 0.4;
   }
 
   private extractKeywords(text: string): string[] {
@@ -206,41 +191,12 @@ export class InternalIdeaReviewService {
   }
 
   private calculateTextSimilarity(text1: string, text2: string): number {
-    // Simple character-based similarity
-    const longer = text1.length > text2.length ? text1 : text2;
-    const shorter = text1.length > text2.length ? text2 : text1;
-    
-    if (longer.length === 0) return 1.0;
-    
-    const distance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - distance) / longer.length;
-  }
+    const words1 = new Set(this.extractKeywords(text1.toLowerCase()));
+    const words2 = new Set(this.extractKeywords(text2.toLowerCase()));
+    if (words1.size === 0 || words2.size === 0) return 0;
 
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix: number[][] = [];
-
-    for (let i = 0; i <= str2.length; i++) {
-      matrix[i] = [i];
-    }
-
-    for (let j = 0; j <= str1.length; j++) {
-      matrix[0][j] = j;
-    }
-
-    for (let i = 1; i <= str2.length; i++) {
-      for (let j = 1; j <= str1.length; j++) {
-        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-
-    return matrix[str2.length][str1.length];
+    const intersection = [...words1].filter((word) => words2.has(word)).length;
+    const union = new Set([...words1, ...words2]).size;
+    return intersection / union;
   }
 }

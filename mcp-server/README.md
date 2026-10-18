@@ -168,9 +168,11 @@ node test-internal-review.js
 
 ### Thresholds
 
-- **External Review**: 40% similarity threshold for rejection
-- **Internal Review**: 50% similarity threshold for rejection (stricter)
-- **Name + Problem**: Lower thresholds for exact name matches
+- Automatic duplicate rejection requires at least 85% similarity in both the core problem and proposed solution.
+- Similar names, industries, technologies, or business models alone do not establish a duplicate.
+- A demonstrable problem/solution mismatch may be rejected only with very low fit (15% or less) and high confidence (90% or more).
+- Clearly shallow ideas may be rejected only when both the stated need is trivial/vague and the solution lacks a concrete, useful outcome, with at least 90% confidence. For example, "Students have study problems" paired only with a timetable, Pomodoro timers, and reminders names no specific challenge or outcome and is low-value. A simple but useful idea is not low-value solely because it is simple; borderline cases go to administrator review.
+- Feasibility and uncertain cases are sent to an administrator for review.
 
 ### Fallback System
 

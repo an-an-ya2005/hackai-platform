@@ -62,13 +62,6 @@ export function EditApplicationContent({ applicationId }: { applicationId: strin
           return;
         }
 
-        // Check if application is editable (only DRAFT status)
-        if (app.status !== 'DRAFT') {
-          toast.error("Only draft applications can be edited");
-          router.push(`/applications/${applicationId}`);
-          return;
-        }
-
         setApplication(app);
         
         console.log('Fetched application data:', app);
@@ -370,7 +363,6 @@ export function EditApplicationContent({ applicationId }: { applicationId: strin
         teamMembers: formData.teamMembers.filter(member => member.trim()),
         githubRepo: formData.githubRepo.trim() || undefined,
         demoUrl: formData.demoUrl.trim() || undefined,
-        status: isDraft ? 'DRAFT' : 'SUBMITTED',
       };
 
       console.log('Submission data:', submissionData);
@@ -387,12 +379,15 @@ export function EditApplicationContent({ applicationId }: { applicationId: strin
       }
 
       const updatedApplication = await ApiClient.updateApplication(applicationId, submissionData);
+      if (!isDraft) {
+        await ApiClient.submitApplication(updatedApplication.id);
+      }
       
       console.log('Application updated successfully:', updatedApplication);
       
       if (isDraft) {
         console.log('Showing draft success toast');
-        toast.success("Draft updated successfully!");
+        toast.success("Changes saved as a draft. Submit it again when you're ready.");
       } else {
         console.log('Showing submission success toast');
         toast.success("Application submitted successfully! Good luck with your project!");
@@ -472,12 +467,12 @@ export function EditApplicationContent({ applicationId }: { applicationId: strin
             </div>
             <h1 className="text-3xl font-bold text-foreground">Edit Application</h1>
             <p className="text-muted-foreground mt-2">
-              Continue working on your AI project submission
+              Update your idea. Saving changes resets its status to Draft and clears previous review results.
             </p>
             <div className="mt-2">
               <Badge variant="outline" className="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
                 <FileText className="h-3 w-3 mr-1" />
-                Draft
+                {application.status === 'DRAFT' ? 'Draft' : `Editing ${application.status.replace(/_/g, ' ')} — will return to Draft`}
               </Badge>
             </div>
           </div>
@@ -744,12 +739,14 @@ export function EditApplicationContent({ applicationId }: { applicationId: strin
                 disabled={loading}
               >
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save as Draft
+                Save Changes as Draft
               </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Submit Application
-              </Button>
+              {application?.status === 'DRAFT' && (
+                <Button type="submit" disabled={loading}>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save and Submit
+                </Button>
+              )}
             </div>
           </form>
           </>

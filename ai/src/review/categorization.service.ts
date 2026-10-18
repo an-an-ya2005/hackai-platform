@@ -71,7 +71,7 @@ export class CategorizationService {
           type: 'CATEGORIZATION',
         },
         data: {
-          result: 'REJECTED',
+          result: 'PENDING',
           errorMessage: error.message,
           processedAt: new Date(),
         },

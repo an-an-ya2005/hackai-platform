@@ -155,16 +155,18 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   }, []);
 
   useEffect(() => {
-    if (user) {
-      connect();
-    } else {
-      disconnect();
-    }
+    void Promise.resolve().then(() => {
+      if (user) {
+        connect();
+      } else {
+        disconnect();
+      }
+    });
 
     return () => {
       disconnect();
     };
-  }, [user]);
+  }, [user, connect, disconnect]);
 
   const value = {
     socket,

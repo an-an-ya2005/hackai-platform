@@ -4,6 +4,8 @@ import { firstValueFrom } from 'rxjs';
 import { DatabaseService } from '../database/database.service';
 import { WebSocketClient } from '../websocket/websocket-client.service';
 import { MCPClientService, MCPAnalysisResult } from '../mcp/mcp-client.service';
+import { detectClearProblemSolutionMismatch } from './problem-solution-fit';
+import { detectClearlyShallowStudyIdea } from './idea-merit';
 
 export interface ExternalSourceResult {
   found: boolean;
@@ -67,10 +69,119 @@ export class ExternalIdeaReviewService {
         },
       });
 
+      const meritAssessment = detectClearlyShallowStudyIdea(
+        application.problemStatement,
+        `${application.description} ${application.solution}`,
+      );
+      if (meritAssessment.isClearlyShallow) {
+        const feedback = `This idea was rejected because its problem statement is too broad to show a meaningful hackathon need, and the proposed solution is limited to common study-planning features without a specific outcome. ${meritAssessment.reason} To qualify, describe a concrete study challenge and explain how your solution measurably helps address it.`;
+        const metadata = {
+          rejectionReason: 'CLEARLY_LOW_VALUE',
+          ideaMeritDecision: 'CLEARLY_LOW_VALUE',
+          ideaMeritConfidence: meritAssessment.confidence,
+          ideaMeritReason: meritAssessment.reason,
+          genericFeatureCount: meritAssessment.genericFeatureCount,
+          analysisMethod: 'CLEAR_SHALLOW_STUDY_IDEA_CHECK',
+        };
+
+        await this.databaseService.aIReview.update({
+          where: { id: aiReview.id },
+          data: {
+            result: 'REJECTED',
+            feedback,
+            metadata,
+            processedAt: new Date(),
+            score: meritAssessment.confidence,
+          },
+        });
+        await this.databaseService.application.update({
+          where: { id: applicationId },
+          data: { status: 'REJECTED', rejectionReason: feedback },
+        });
+        await this.webSocketClient.sendApplicationRejection(applicationId, {
+          userId: application.userId,
+          rejectionStage: 'EXTERNAL_IDEA',
+          primaryReason: 'The problem is too broad and the solution has no specific outcome',
+          feedback,
+          score: meritAssessment.confidence,
+          details: metadata,
+        });
+
+        this.logger.log(`Application ${applicationId} rejected for a clearly shallow study idea`);
+        return;
+      }
+
+      const fitAssessment = detectClearProblemSolutionMismatch(
+        application.problemStatement,
+        application.solution,
+      );
+      if (fitAssessment.isMismatch && fitAssessment.confidence >= 0.9) {
+        const feedback = `The stated problem focuses on ${fitAssessment.problemDomains.join(', ')}, but the proposed solution focuses on ${fitAssessment.solutionDomains.join(', ')}. The solution does not address the problem as written. Please choose an idea whose solution directly addresses its problem, or revise these sections so they match.`;
+        const metadata = {
+          rejectionReason: 'PROBLEM_SOLUTION_MISMATCH',
+          problemSolutionFit: 0,
+          mismatchConfidence: fitAssessment.confidence,
+          problemDomains: fitAssessment.problemDomains,
+          solutionDomains: fitAssessment.solutionDomains,
+          analysisMethod: 'DOMAIN_MISMATCH_CHECK',
+        };
+
+        await this.databaseService.aIReview.update({
+          where: { id: aiReview.id },
+          data: {
+            result: 'REJECTED',
+            feedback,
+            metadata,
+            processedAt: new Date(),
+            score: fitAssessment.confidence,
+          },
+        });
+        await this.databaseService.application.update({
+          where: { id: applicationId },
+          data: { status: 'REJECTED', rejectionReason: feedback },
+        });
+        await this.webSocketClient.sendApplicationRejection(applicationId, {
+          userId: application.userId,
+          rejectionStage: 'EXTERNAL_IDEA',
+          primaryReason: 'The proposed solution does not address the stated problem',
+          feedback,
+          score: fitAssessment.confidence,
+          details: metadata,
+        });
+
+        this.logger.log(`Application ${applicationId} rejected for a clear problem-solution mismatch`);
+        return;
+      }
+
       // Use MCP + Gemini for intelligent analysis
-      const analysisResult = await this.analyzeWithGeminiAI(application.title, application.description);
+      const analysisResult = await this.analyzeWithGeminiAI(application);
       
-      const foundInExternal = analysisResult.isSimilar;
+      const isClearDuplicate = analysisResult.isSimilar
+        && analysisResult.recommendation === 'REJECT'
+        && analysisResult.rejectionType === 'CLEAR_DUPLICATE'
+        && analysisResult.companyMatchVerified === true
+        && typeof analysisResult.mostSimilarCompany?.name === 'string'
+        && typeof analysisResult.problemSimilarity === 'number'
+        && analysisResult.problemSimilarity >= 0
+        && analysisResult.problemSimilarity >= 0.85
+        && analysisResult.problemSimilarity <= 1
+        && typeof analysisResult.solutionSimilarity === 'number'
+        && analysisResult.solutionSimilarity >= 0
+        && analysisResult.solutionSimilarity >= 0.85
+        && analysisResult.solutionSimilarity <= 1;
+      const isClearMismatch = analysisResult.recommendation === 'REJECT'
+        && analysisResult.rejectionType === 'PROBLEM_SOLUTION_MISMATCH'
+        && typeof analysisResult.problemSolutionFit === 'number'
+        && analysisResult.problemSolutionFit >= 0
+        && analysisResult.problemSolutionFit <= 0.15
+        && typeof analysisResult.mismatchConfidence === 'number'
+        && analysisResult.mismatchConfidence <= 1
+        && analysisResult.mismatchConfidence >= 0.9;
+      const isClearlyLowValue = analysisResult.ideaMeritDecision === 'CLEARLY_LOW_VALUE'
+        && typeof analysisResult.ideaMeritConfidence === 'number'
+        && analysisResult.ideaMeritConfidence >= 0.9
+        && analysisResult.ideaMeritConfidence <= 1;
+      const shouldReject = isClearDuplicate || isClearMismatch || isClearlyLowValue;
       
       let feedback = '';
       let metadata = {
@@ -78,17 +189,31 @@ export class ExternalIdeaReviewService {
         analysisMethod: 'MCP_GEMINI_AI',
       };
 
-      if (foundInExternal) {
+      if (shouldReject) {
         const similarityScore = analysisResult.similarityScore;
+        const reviewScore = isClearlyLowValue && !isClearDuplicate && !isClearMismatch
+          ? analysisResult.ideaMeritConfidence
+          : similarityScore;
         
         // Use Gemini's feedback directly
-        feedback = analysisResult.feedback;
+        feedback = isClearDuplicate
+          ? `${analysisResult.feedback} This idea closely matches an existing company. Please choose a different idea.`
+          : isClearlyLowValue
+            ? `This idea was rejected because it does not present a sufficiently meaningful hackathon problem and solution. ${analysisResult.ideaMeritReason || analysisResult.feedback} Add a specific, consequential problem and a solution that delivers a concrete outcome. Simple solutions can be strong when they solve a genuine problem.`
+            : analysisResult.feedback;
         
         // Enhanced metadata with Gemini insights
         const enhancedMetadata = {
           geminiAnalysis: JSON.parse(JSON.stringify(analysisResult)),
-          rejectionReason: 'SIMILAR_IDEA_EXISTS_YC',
+          rejectionReason: isClearDuplicate
+            ? 'CLEAR_DUPLICATE'
+            : isClearMismatch
+              ? 'PROBLEM_SOLUTION_MISMATCH'
+              : 'CLEARLY_LOW_VALUE',
           similarityScore,
+          ideaMeritDecision: analysisResult.ideaMeritDecision || null,
+          ideaMeritConfidence: analysisResult.ideaMeritConfidence ?? null,
+          ideaMeritReason: analysisResult.ideaMeritReason || null,
           suggestions: analysisResult.suggestions || [],
           mostSimilarCompany: analysisResult.mostSimilarCompany || null,
           analysisMethod: 'MCP_GEMINI_AI',
@@ -103,7 +228,7 @@ export class ExternalIdeaReviewService {
             feedback,
             metadata: enhancedMetadata,
             processedAt: new Date(),
-            score: similarityScore,
+            score: reviewScore,
           },
         });
 
@@ -119,19 +244,25 @@ export class ExternalIdeaReviewService {
         await this.webSocketClient.sendApplicationRejection(applicationId, {
           userId: application.userId,
           rejectionStage: 'EXTERNAL_IDEA',
-          primaryReason: 'AI Detected Similar Startup in Y Combinator',
+          primaryReason: isClearDuplicate
+            ? 'Clear duplicate found in Y Combinator analysis'
+            : isClearMismatch
+              ? 'Problem and proposed solution do not match'
+              : 'Idea does not meet the minimum substantive-value threshold',
           feedback,
-          score: similarityScore,
+          score: reviewScore,
           details: {
             similarityScore,
             mostSimilarCompany: analysisResult.mostSimilarCompany,
             suggestions: analysisResult.suggestions || [],
-            rejectionReason: 'SIMILAR_IDEA_EXISTS_YC',
+            rejectionReason: isClearDuplicate ? 'CLEAR_DUPLICATE' : 'PROBLEM_SOLUTION_MISMATCH',
             aiAnalysis: analysisResult.analysis,
           },
         });
       } else {
-        feedback = 'Gemini AI analysis found no significant similarity to existing Y Combinator companies. Proceeding to internal review.';
+        feedback = analysisResult.recommendation === 'REJECT'
+          ? `${analysisResult.feedback} This did not meet the strict automatic-rejection criteria; continuing to administrator review.`
+          : 'No clear duplicate or problem-solution mismatch met the automatic-rejection criteria. Continuing to internal review; an administrator makes the final decision.';
         
         await this.databaseService.aIReview.update({
           where: { id: aiReview.id },
@@ -140,7 +271,7 @@ export class ExternalIdeaReviewService {
             feedback,
             metadata,
             processedAt: new Date(),
-            score: 0.9, // High confidence for approved
+            score: analysisResult.similarityScore,
           },
         });
 
@@ -158,14 +289,14 @@ export class ExternalIdeaReviewService {
           'EXTERNAL_IDEA',
           'APPROVED',
           { 
-            message: 'Gemini AI found no similar ideas in Y Combinator. Moving to internal review...',
+            message: 'No clear duplicate or mismatch was established. Moving to internal review; an administrator makes the final decision...',
             nextStage: 'INTERNAL_IDEA_REVIEW',
             aiConfidence: analysisResult.similarityScore
           }
         );
       }
 
-      this.logger.log(`External idea review completed for application ${applicationId}: ${foundInExternal ? 'REJECTED' : 'APPROVED'}`);
+      this.logger.log(`External idea review completed for application ${applicationId}: ${shouldReject ? 'REJECTED' : 'APPROVED'}`);
     } catch (error) {
       this.logger.error(`Error in external idea review for application ${applicationId}:`, error);
       
@@ -176,7 +307,7 @@ export class ExternalIdeaReviewService {
           type: 'EXTERNAL_IDEA',
         },
         data: {
-          result: 'REJECTED',
+          result: 'PENDING',
           errorMessage: error.message,
           processedAt: new Date(),
         },
@@ -187,7 +318,12 @@ export class ExternalIdeaReviewService {
   /**
    * Analyze idea similarity using MCP + Gemini AI
    */
-  private async analyzeWithGeminiAI(title: string, description: string): Promise<MCPAnalysisResult> {
+  private async analyzeWithGeminiAI(application: {
+    title: string;
+    description: string;
+    problemStatement: string;
+    solution: string;
+  }): Promise<MCPAnalysisResult> {
     try {
       this.logger.log('Starting Gemini AI analysis via MCP...');
       
@@ -220,8 +356,10 @@ export class ExternalIdeaReviewService {
 
       // Prepare user application data
       const userApplication = {
-        title,
-        description,
+        title: application.title,
+        description: application.description,
+        problemStatement: application.problemStatement,
+        proposedSolution: application.solution,
         targetMarket: 'Not specified', // Could be extracted from application in future
         businessModel: 'Not specified'
       };
@@ -231,14 +369,20 @@ export class ExternalIdeaReviewService {
         userApplication,
         ycCompanies
       );
+      const matchedCompanyName = typeof analysisResult.mostSimilarCompany?.name === 'string'
+        ? analysisResult.mostSimilarCompany.name.trim().toLowerCase()
+        : '';
+      const companyMatchVerified = Boolean(matchedCompanyName)
+        && ycCompanies.some((company) => company.name.trim().toLowerCase() === matchedCompanyName);
+      const verifiedAnalysisResult = { ...analysisResult, companyMatchVerified };
       
-      this.logger.log(`Gemini analysis completed: ${analysisResult.recommendation} (similarity: ${analysisResult.similarityScore})`);
+      this.logger.log(`Gemini analysis completed: ${verifiedAnalysisResult.recommendation} (similarity: ${verifiedAnalysisResult.similarityScore})`);
       
-      if (analysisResult.mostSimilarCompany) {
-        this.logger.log(`Most similar company: ${analysisResult.mostSimilarCompany.name} - ${analysisResult.mostSimilarCompany.reason}`);
+      if (verifiedAnalysisResult.mostSimilarCompany) {
+        this.logger.log(`Most similar company: ${verifiedAnalysisResult.mostSimilarCompany.name} - ${verifiedAnalysisResult.mostSimilarCompany.reason}`);
       }
 
-      return analysisResult;
+      return verifiedAnalysisResult;
 
     } catch (error) {
       this.logger.error('Error in Gemini AI analysis:', error);
@@ -247,8 +391,12 @@ export class ExternalIdeaReviewService {
       return {
         isSimilar: false,
         similarityScore: 0,
+        rejectionType: 'NONE',
+        ideaMeritDecision: 'REVIEW',
+        ideaMeritConfidence: 0,
+        ideaMeritReason: 'The analysis failed; administrator review is required.',
         recommendation: 'APPROVE',
-        feedback: 'Unable to complete AI analysis due to technical issues. Application approved for manual review.',
+        feedback: 'Unable to complete AI analysis due to technical issues. Administrator review is required.',
         error: true,
         message: error.message
       };

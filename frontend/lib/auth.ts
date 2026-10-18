@@ -13,9 +13,12 @@ export interface AuthResponse {
   user: User;
 }
 
+export type AccountRole = 'ADMIN' | 'PARTICIPANT';
+
 export interface LoginCredentials {
   email: string;
   password: string;
+  role?: AccountRole;
 }
 
 export interface RegisterCredentials {
@@ -23,6 +26,7 @@ export interface RegisterCredentials {
   password: string;
   firstName: string;
   lastName: string;
+  role?: AccountRole;
 }
 
 class AuthService {

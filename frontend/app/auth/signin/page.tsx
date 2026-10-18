@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
+import type { AccountRole } from "@/lib/auth";
 import { 
   Github, Mail, ArrowLeft, Eye, EyeOff, Lock, 
   User, Sparkles, Trophy, Shield, CheckCircle
@@ -24,11 +25,12 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [role, setRole] = useState<AccountRole>("PARTICIPANT");
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const user = await login(email, password);
+      const user = await login(email, password, role);
       toast.success("Welcome back! You have been successfully signed in.");
       
       // Redirect based on user role
@@ -138,11 +140,46 @@ export default function SignInPage() {
               </CardHeader>
               
               <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Sign in as</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {([
+                      { value: "PARTICIPANT", label: "Participant / User" },
+                      { value: "ADMIN", label: "Admin" },
+                    ] as const).map((option) => (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant={role === option.value ? "default" : "outline"}
+                        aria-pressed={role === option.value}
+                        onClick={() => setRole(option.value)}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {role === "ADMIN" && (
+                  <div className="space-y-3 rounded-lg border p-4 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Admins sign in with Google using the email configured as ADMIN_EMAIL.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={handleGoogleSignIn}
+                      disabled={isLoading}
+                      className="w-full h-12"
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Continue with Google as Admin
+                    </Button>
+                  </div>
+                )}
                 {/* Email/Password Form */}
-                <form onSubmit={handleEmailSignIn} className="space-y-4">
+                <form onSubmit={handleEmailSignIn} className="space-y-4" hidden={role === "ADMIN"}>
                   <div className="space-y-2">
                     <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
-                    <div className="relative">
+                    <div className="relative" hidden={role === "ADMIN"}>
                       <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="email"
@@ -238,7 +275,7 @@ export default function SignInPage() {
                 </div>
 
                 {/* OAuth Buttons */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3" hidden={role === "ADMIN"}>
                   <Button
                     variant="outline"
                     onClick={handleGithubSignIn}
@@ -258,6 +295,9 @@ export default function SignInPage() {
                     Google
                   </Button>
                 </div>
+                <p className="text-center text-xs text-muted-foreground" hidden={role === "ADMIN"}>
+                  Google sign-in uses the account role assigned to your email; the email configured as ADMIN_EMAIL is the admin account.
+                </p>
 
                 <div className="text-center">
                   <p className="text-sm text-muted-foreground">

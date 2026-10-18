@@ -11,8 +11,8 @@ export class AIServiceClient implements OnModuleInit, OnModuleDestroy {
     this.client = ClientProxyFactory.create({
       transport: Transport.TCP,
       options: {
-        host: 'localhost',
-        port: 3003,
+        host: process.env.AI_SERVICE_HOST || 'localhost',
+        port: Number(process.env.AI_SERVICE_PORT) || 3003,
       },
     });
   }

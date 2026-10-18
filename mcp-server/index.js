@@ -221,7 +221,7 @@ class ExternalReviewMCPServer {
       const prompt = `
 You are an expert startup analyst evaluating if a user's startup idea is too similar to existing Y Combinator companies.
 
-Your task is to determine if the idea should be REJECTED or APPROVED based on these specific criteria:
+Your task is to identify clear duplicates, demonstrable problem/solution mismatches, and ideas that are clearly too shallow to meet a hackathon's minimum substantive-value threshold. Do not reject an idea merely because it is simple, inexpensive, common, has a small target market, or lacks novelty. A simple idea is valuable if it addresses a concrete, consequential need and produces a useful outcome. When evidence is uncertain, recommend human administrator review.
 
 USER APPLICATION:
 Title: ${userApplication.title}
@@ -240,13 +240,10 @@ ${externalData.ycCompanies.map(company => `
   Tags: ${company.tags?.join(', ') || 'None'}
 `).join('\n')}
 
-REJECTION CRITERIA (Reject if ANY of these apply):
-1. SAME/SIMILAR NAME + SAME/SIMILAR PROBLEM: Title name and description/problem are same or very similar
-2. DIFFERENT NAME BUT SAME CONCEPT: Title is different but problem statement, business model, or approach is same or very similar
-
-APPROVAL CRITERIA (Approve if ANY of these apply):
-1. TOTALLY UNIQUE: Title name and description/problem are solving a NEW problem not listed in Y Combinator
-2. DIFFERENT APPROACH: Idea exists in Y Combinator but the way they're addressing it is totally different and unique
+AUTOMATIC REJECTION RULES:
+1. CLEAR_DUPLICATE: Reject only when BOTH the core problem and proposed solution substantially match a specific existing company (each similarity at least 0.85 on a 0-1 scale). Names, industry, technology, business model, or shared keywords alone never establish a duplicate.
+2. PROBLEM_SOLUTION_MISMATCH: Reject only when the proposed solution demonstrably does not address the user's stated problem. Set problemSolutionFit to 0-1, where 0 means no fit, and mismatchConfidence to 0-1. This is eligible for automatic rejection only if fit is at most 0.15 and confidence is at least 0.90.
+For any uncertain or borderline case, recommend APPROVE for the AI gate and explain that an administrator must decide. Do not reject an idea just because it is common, simple, infeasible, or not differentiated enough.
 
 ANALYSIS FRAMEWORK:
 - Compare TITLE similarity (exact names, variations, synonyms)
@@ -261,6 +258,11 @@ Please provide a JSON response with:
 {
   "isSimilar": boolean,
   "similarityScore": number (0-1),
+  "rejectionType": "CLEAR_DUPLICATE" | "PROBLEM_SOLUTION_MISMATCH" | "NONE",
+  "problemSimilarity": number (0-1),
+  "solutionSimilarity": number (0-1),
+  "problemSolutionFit": number (0-1),
+  "mismatchConfidence": number (0-1),
   "mostSimilarCompany": {
     "name": "string",
     "reason": "string explaining the similarity"
@@ -349,22 +351,18 @@ Be precise and thorough in your analysis.
           if (isHighSimilarity || isExactMatch || isContainedMatch) {
             console.log(`❌ NAME MATCH FOUND: ${company.name} (similarity: ${Math.round(nameSimilarity * 100)}%)`);
             
-            // Check if problem/description is also similar
-            const problemSimilarity = this.calculateBusinessConceptSimilarity(
-              userDesc + ' ' + userProblem,
-              (company.oneLiner || '') + ' ' + (company.description || '')
-            );
-            
-            console.log(`📊 Problem similarity: ${Math.round(problemSimilarity * 100)}%`);
-            
-            // For exact name matches, reject if problem similarity is >10% (very low threshold)
-            // For high similarity names, reject if problem similarity is >30%
-            const rejectionThreshold = (isExactMatch || nameSimilarity > 0.95) ? 0.1 : 0.3;
-            
-            if (problemSimilarity > rejectionThreshold) {
+            const comparison = this.analyzeBusinessSimilarity(userApplication, company);
+            const problemSimilarity = comparison.problemSimilarity;
+            const solutionSimilarity = comparison.solutionSimilarity;
+
+            console.log(`📊 Problem similarity: ${Math.round(problemSimilarity * 100)}%; solution similarity: ${Math.round(solutionSimilarity * 100)}%`);
+
+            if (problemSimilarity >= 0.85 && solutionSimilarity >= 0.85) {
               return this.createRejectionResponse(company, 'NAME_AND_PROBLEM_MATCH', {
                 nameSimilarity: Math.round(nameSimilarity * 100),
                 problemSimilarity: Math.round(problemSimilarity * 100),
+                solutionSimilarity: Math.round(solutionSimilarity * 100),
+                overallSimilarity: Math.round((problemSimilarity + solutionSimilarity) * 50),
                 reason: `Same/similar name "${userApplication.title}" matches "${company.name}" AND the problem/description is also similar (${Math.round(problemSimilarity * 100)}% similarity).`
               }, userApplication);
             }
@@ -404,10 +402,11 @@ Be precise and thorough in your analysis.
       console.log(`🎯 Analysis complete. Highest business similarity: ${Math.round(highestSimilarity * 100)}% with ${mostSimilarCompany?.name || 'no company'}`);
       
       // Step 3: Make decision based on business concept similarity
-      // Reject if business concept similarity is high (>40%)
-      const businessConceptThreshold = 0.4;
-      
-      if (highestSimilarity > businessConceptThreshold && mostSimilarCompany) {
+      const hasClearDuplicate = mostSimilarCompany
+        && similarityDetails.problemSimilarity >= 0.85
+        && similarityDetails.solutionSimilarity >= 0.85;
+
+      if (hasClearDuplicate) {
         console.log(`❌ REJECTING: Business concept too similar (${Math.round(highestSimilarity * 100)}%) to ${mostSimilarCompany.name}`);
         
         return this.createRejectionResponse(mostSimilarCompany, 'BUSINESS_CONCEPT_MATCH', {
@@ -621,6 +620,14 @@ Be precise and thorough in your analysis.
           text: JSON.stringify({
             isSimilar: true,
             similarityScore: matchType === 'NAME_AND_PROBLEM_MATCH' ? 0.95 : details.overallSimilarity / 100,
+            rejectionType: 'CLEAR_DUPLICATE',
+            problemSimilarity: (details.problemSimilarity || 0) / 100,
+            solutionSimilarity: (details.solutionSimilarity || 0) / 100,
+            problemSolutionFit: 1,
+            mismatchConfidence: 0,
+            ideaMeritDecision: "REVIEW",
+            ideaMeritConfidence: 0.5,
+            ideaMeritReason: "Fallback similarity analysis cannot reliably assess idea merit; administrator review is required.",
             mostSimilarCompany: {
               name: company.name,
               reason: details.reason
@@ -659,6 +666,14 @@ Be precise and thorough in your analysis.
           text: JSON.stringify({
             isSimilar: false,
             similarityScore: details.overallSimilarity / 100,
+            rejectionType: 'NONE',
+            problemSimilarity: details.problemSimilarity || 0,
+            solutionSimilarity: details.solutionSimilarity || 0,
+            problemSolutionFit: 1,
+            mismatchConfidence: 0,
+            ideaMeritDecision: "REVIEW",
+            ideaMeritConfidence: 0.5,
+            ideaMeritReason: "Fallback similarity analysis cannot reliably assess idea merit; administrator review is required.",
             mostSimilarCompany: mostSimilarCompany ? {
               name: mostSimilarCompany.name,
               reason: `Closest match with ${details.overallSimilarity}% similarity - sufficiently differentiated`
@@ -694,8 +709,12 @@ Be precise and thorough in your analysis.
             error: true,
             message: errorMessage,
             isSimilar: false,
+            rejectionType: "NONE",
+            ideaMeritDecision: "REVIEW",
+            ideaMeritConfidence: 0,
+            ideaMeritReason: "The analysis failed; administrator review is required.",
             recommendation: "APPROVE",
-            feedback: "Unable to complete similarity analysis due to technical error. Application approved by default."
+            feedback: "Unable to complete similarity analysis due to technical error. Administrator review is required."
           })
         }
       ],
@@ -954,22 +973,22 @@ Be precise and thorough in your analysis.
         }
       ];
 
-      console.log(`🎯 Fallback dataset includes ${fallbackCompanies.length} companies including Corgi Labs and Hipmob`);
+      console.log('⚠️ External company data is unavailable; returning an empty dataset rather than mock matches.');
 
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
-              companies: fallbackCompanies,
-              total: fallbackCompanies.length,
+              companies: [],
+              total: 0,
               error: true,
               errorMessage: error.message,
               fallbackData: true,
               query: args,
               fetchedAt: new Date().toISOString(),
-              source: 'Enhanced Fallback Mock Data (includes Corgi Labs, Hipmob and fraud detection companies)',
-              analysisMode: 'FALLBACK_FULL_DATASET'
+              source: 'Unavailable',
+              analysisMode: 'ERROR'
             }, null, 2)
           }
         ],
@@ -1000,7 +1019,7 @@ Be precise and thorough in your analysis.
       const prompt = `
 You are an expert startup analyst evaluating if a user's startup idea is too similar to existing applications in our internal database.
 
-Your task is to determine if the idea should be REJECTED or APPROVED based on these specific criteria:
+Automatically reject only a clear duplicate or a demonstrable mismatch between the user's problem and proposed solution. Feasibility, team size, technology overlap, novelty, or subjective quality are not grounds for automatic rejection; uncertain cases must go to a human administrator.
 
 USER APPLICATION:
 Title: ${userApplication.title}
@@ -1023,15 +1042,12 @@ ${internalData.applications.map(app => `
   Created: ${new Date(app.createdAt).toLocaleDateString()}
 `).join('\n')}
 
-REJECTION CRITERIA (Reject if ANY of these apply):
-1. SAME/SIMILAR NAME + SAME/SIMILAR PROBLEM: Title name and description/problem are same or very similar
-2. DIFFERENT NAME BUT SAME CONCEPT: Title is different but problem statement, solution approach, or business model is same or very similar
-3. DUPLICATE TECH IMPLEMENTATION: Using same tech stack to solve the same problem in the same way
-
-APPROVAL CRITERIA (Approve if ANY of these apply):
-1. TOTALLY UNIQUE: Title name and description/problem are solving a NEW problem not in our database
-2. DIFFERENT APPROACH: Problem exists but the way they're addressing it is totally different and unique
-3. SIGNIFICANT DIFFERENTIATION: While similar, brings substantial innovation or targets different market segment
+REJECTION CRITERIA:
+1. CLEAR_DUPLICATE: Both the core problem and proposed solution substantially match a specific existing application (each similarity at least 0.85 on a 0-1 scale). Similar names, categories, technologies, or team sizes alone never establish a duplicate.
+2. PROBLEM_SOLUTION_MISMATCH: The proposed solution demonstrably does not address the stated problem, with problemSolutionFit at most 0.15 and mismatchConfidence at least 0.90.
+3. CLEARLY_LOW_VALUE: Reject only when BOTH the problem is vague/trivial or lacks a meaningful user need AND the proposed solution is limited to generic, low-effort features (for example, motivational quotes and basic reminders) without a concrete outcome addressing a real pain point. Set ideaMeritDecision to CLEARLY_LOW_VALUE only when confidence is at least 0.90. If either the problem or solution could plausibly be meaningful, set ideaMeritDecision to REVIEW and do not auto-reject.
+Example: "Students have study problems" paired only with a study timetable, Pomodoro timers, and reminders is CLEARLY_LOW_VALUE: it names no specific study challenge or impact, and lists commonplace features without a defined outcome. This is not a rejection of study planners generally; a concrete need and tailored outcome should be assessed on their merits.
+For all uncertain or borderline cases, recommend APPROVE for the AI gate and set ideaMeritDecision to REVIEW so an administrator decides. Do not equate simplicity, limited scope, low budget, or lack of novelty with low value.
 
 ANALYSIS FRAMEWORK:
 - Compare TITLE similarity (exact names, variations, synonyms)
@@ -1047,6 +1063,14 @@ Please provide a JSON response with:
 {
   "isSimilar": boolean,
   "similarityScore": number (0-1),
+  "rejectionType": "CLEAR_DUPLICATE" | "PROBLEM_SOLUTION_MISMATCH" | "NONE",
+  "problemSimilarity": number (0-1),
+  "solutionSimilarity": number (0-1),
+  "problemSolutionFit": number (0-1),
+  "mismatchConfidence": number (0-1),
+  "ideaMeritDecision": "CLEARLY_LOW_VALUE" | "REVIEW" | "SUBSTANTIVE",
+  "ideaMeritConfidence": number (0-1),
+  "ideaMeritReason": "brief, specific explanation of the problem's significance and solution's tangible outcome",
   "mostSimilarApplication": {
     "id": "string",
     "title": "string",
@@ -1135,22 +1159,18 @@ Be precise and thorough in your analysis.
         if (isHighSimilarity || isExactMatch || isContainedMatch) {
           console.log(`❌ NAME MATCH FOUND: ${app.title} (similarity: ${Math.round(nameSimilarity * 100)}%)`);
           
-          // Check if problem/description is also similar
-          const problemSimilarity = this.calculateBusinessConceptSimilarity(
-            userDesc + ' ' + userProblem,
-            (app.description || '') + ' ' + (app.problemStatement || '')
-          );
-          
-          console.log(`📊 Problem similarity: ${Math.round(problemSimilarity * 100)}%`);
-          
-          // For exact name matches, reject if problem similarity is >10% (very low threshold)
-          // For high similarity names, reject if problem similarity is >30%
-          const rejectionThreshold = (isExactMatch || nameSimilarity > 0.95) ? 0.1 : 0.3;
-          
-          if (problemSimilarity > rejectionThreshold) {
+          const comparison = this.analyzeInternalBusinessSimilarity(userApplication, app);
+          const problemSimilarity = comparison.problemSimilarity;
+          const solutionSimilarity = comparison.solutionSimilarity;
+
+          console.log(`📊 Problem similarity: ${Math.round(problemSimilarity * 100)}%; solution similarity: ${Math.round(solutionSimilarity * 100)}%`);
+
+          if (problemSimilarity >= 0.85 && solutionSimilarity >= 0.85) {
             return this.createInternalRejectionResponse(app, 'NAME_AND_PROBLEM_MATCH', {
               nameSimilarity: Math.round(nameSimilarity * 100),
               problemSimilarity: Math.round(problemSimilarity * 100),
+              solutionSimilarity: Math.round(solutionSimilarity * 100),
+              overallSimilarity: Math.round((problemSimilarity + solutionSimilarity) * 50),
               reason: `Same/similar name "${userApplication.title}" matches internal application "${app.title}" AND the problem/description is also similar (${Math.round(problemSimilarity * 100)}% similarity).`
             }, userApplication);
           }
@@ -1188,11 +1208,11 @@ Be precise and thorough in your analysis.
       
       console.log(`🎯 Analysis complete. Highest business similarity: ${Math.round(highestSimilarity * 100)}% with ${mostSimilarApplication?.title || 'no application'}`);
       
-      // Step 3: Make decision based on business concept similarity
-      // Reject if business concept similarity is high (>50% for internal apps - stricter than external)
-      const businessConceptThreshold = 0.5;
-      
-      if (highestSimilarity > businessConceptThreshold && mostSimilarApplication) {
+      const hasClearDuplicate = mostSimilarApplication
+        && similarityDetails.problemSimilarity >= 0.85
+        && similarityDetails.solutionSimilarity >= 0.85;
+
+      if (hasClearDuplicate) {
         console.log(`❌ REJECTING: Business concept too similar (${Math.round(highestSimilarity * 100)}%) to internal application ${mostSimilarApplication.title}`);
         
         return this.createInternalRejectionResponse(mostSimilarApplication, 'BUSINESS_CONCEPT_MATCH', {
@@ -1310,6 +1330,11 @@ Be precise and thorough in your analysis.
           text: JSON.stringify({
             isSimilar: true,
             similarityScore: matchType === 'NAME_AND_PROBLEM_MATCH' ? 0.95 : details.overallSimilarity / 100,
+            rejectionType: 'CLEAR_DUPLICATE',
+            problemSimilarity: (details.problemSimilarity || 0) / 100,
+            solutionSimilarity: (details.solutionSimilarity || 0) / 100,
+            problemSolutionFit: 1,
+            mismatchConfidence: 0,
             mostSimilarApplication: {
               id: app.id,
               title: app.title,
@@ -1351,6 +1376,11 @@ Be precise and thorough in your analysis.
           text: JSON.stringify({
             isSimilar: false,
             similarityScore: details.overallSimilarity / 100,
+            rejectionType: 'NONE',
+            problemSimilarity: 0,
+            solutionSimilarity: 0,
+            problemSolutionFit: 1,
+            mismatchConfidence: 0,
             mostSimilarApplication: mostSimilarApp ? {
               id: mostSimilarApp.id,
               title: mostSimilarApp.title,

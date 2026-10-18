@@ -12,9 +12,20 @@ import { Logger, UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { NotificationsService } from '../notifications/notifications.service';
 
+const websocketOrigins = [
+  'http://127.0.0.1:3000',
+  'http://localhost:3000',
+  'http://127.0.0.1:3004',
+  'http://localhost:3004',
+  ...(process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+];
+
 @WebSocketGateway({
   cors: {
-    origin: ['http://127.0.0.1:3000', 'http://localhost:3000'],
+    origin: websocketOrigins,
     credentials: true,
   },
 })
@@ -196,6 +207,14 @@ export class ApplicationStatusGateway implements OnGatewayConnection, OnGatewayD
     
     // Also send to application-specific room (for admins or other interested parties)
     this.server.to(`application:${applicationId}`).emit('application-status-updated', updateData);
+  }
+
+  sendNotification(userId: string, notification: unknown) {
+    this.logger.log(`Sending notification to user ${userId}`);
+    this.server.to(`user:${userId}`).emit('new-notification', {
+      notification,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**

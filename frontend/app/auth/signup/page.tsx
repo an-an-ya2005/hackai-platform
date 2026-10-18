@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
+import type { AccountRole } from "@/lib/auth";
 import { 
   Github, Mail, ArrowLeft, Eye, EyeOff, Lock, 
   User, Sparkles, Trophy, Shield, CheckCircle, UserPlus
@@ -22,6 +23,7 @@ export default function SignUpPage() {
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [role, setRole] = useState<AccountRole>("PARTICIPANT");
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -45,7 +47,7 @@ export default function SignUpPage() {
     }
 
     try {
-      const user = await register(formData.email, formData.password, formData.firstName, formData.lastName);
+      const user = await register(formData.email, formData.password, formData.firstName, formData.lastName, role);
       toast.success("Account created successfully! Welcome to Hack-Ai thon.");
       
       // Redirect based on user role
@@ -162,29 +164,71 @@ export default function SignUpPage() {
               </CardHeader>
               
               <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Create account as</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {([
+                      { value: "PARTICIPANT", label: "Participant / User" },
+                      { value: "ADMIN", label: "Admin" },
+                    ] as const).map((option) => (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant={role === option.value ? "default" : "outline"}
+                        aria-pressed={role === option.value}
+                        onClick={() => setRole(option.value)}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 {/* OAuth Buttons */}
                 <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={handleGithubSignUp}
-                    disabled={isLoading}
-                    className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
-                  >
-                    <Github className="mr-2 h-4 w-4" />
-                    GitHub
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleGoogleSignUp}
-                    disabled={isLoading}
-                    className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    Google
-                  </Button>
+                  {role === "ADMIN" ? (
+                    <Button
+                      variant="outline"
+                      onClick={handleGoogleSignUp}
+                      disabled={isLoading}
+                      className="col-span-2 h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Create Admin Account with Google
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={handleGithubSignUp}
+                        disabled={isLoading}
+                        className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
+                      >
+                        <Github className="mr-2 h-4 w-4" />
+                        GitHub
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={handleGoogleSignUp}
+                        disabled={isLoading}
+                        className="h-12 border-border/40 hover:bg-muted/80 transition-all duration-200"
+                      >
+                        <Mail className="mr-2 h-4 w-4" />
+                        Google
+                      </Button>
+                    </>
+                  )}
                 </div>
+                <p className="text-center text-xs text-muted-foreground" hidden={role === "ADMIN"}>
+                  Google sign-in uses the account role assigned to your email; the email configured as ADMIN_EMAIL is the admin account.
+                </p>
 
-                <div className="relative">
+                {role === "ADMIN" ? (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Your account gets Admin access only when you sign in with the Google email configured as ADMIN_EMAIL.
+                  </p>
+                ) : null}
+
+                <div className="relative" hidden={role === "ADMIN"}>
                   <div className="absolute inset-0 flex items-center">
                     <Separator className="w-full" />
                   </div>
@@ -196,7 +240,7 @@ export default function SignUpPage() {
                 </div>
 
                 {/* Email/Password Form */}
-                <form onSubmit={handleEmailSignUp} className="space-y-4">
+                <form onSubmit={handleEmailSignUp} className="space-y-4" hidden={role === "ADMIN"}>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor="firstName" className="text-sm font-medium">First Name</Label>

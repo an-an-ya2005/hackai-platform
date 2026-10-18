@@ -87,6 +87,8 @@ From `backend/`:
 - `npm run test:e2e` — run e2e tests
 - `npm run db:seed` — seed the database
 
+Admins can upload or replace the current PDF brochure from the admin dashboard. Signed-in participants can view and download it from the **Brochure** navigation item. Brochure uploads are limited to valid PDF files up to 15 MB and are stored in the database.
+
 ---
 
 ## ⚙️ Environment
@@ -102,6 +104,11 @@ For manual startup, configure environment variables such as:
 - `GITHUB_CLIENT_SECRET`
 - `NEXT_PUBLIC_API_URL`
 - `GEMINI_API_KEY`
+- `AI_SERVICE_HOST` — hostname the backend uses to reach the AI service (defaults to `localhost` for manual local development)
+
+When deploying the backend and AI service separately, set `AI_SERVICE_HOST` to the AI service's private hostname and `AI_SERVICE_PORT` to its TCP port (default `3003`). Do not use `localhost` for a separate service. The AI service must expose the TCP listener on port `3003`; its HTTP health endpoint on port `3002` is separate.
+
+For Google sign-in deployments, set `ADMIN_EMAIL` on the backend to the email address that should receive the `ADMIN` role. The Admin option on the sign-in and sign-up forms uses Google only, and the account receives Admin access only when Google confirms this configured email. Other Google accounts receive the `PARTICIPANT` role. Admin accounts cannot be created through the unverified email/password form; no admin password is needed.
 
 ---
 
@@ -119,5 +126,3 @@ For manual startup, configure environment variables such as:
 - This repository uses Docker Compose with a single backend instance.
 - Monitoring services like Grafana/Prometheus are not part of the running stack today.
 - NGINX is configured as a reverse proxy, not a load balancer.
-
-

@@ -20,6 +20,8 @@ The AI service processes applications through the following stages:
 Applications move through these states during AI review:
 - `SUBMITTED` → `EXTERNAL_IDEA_REVIEW` → `INTERNAL_IDEA_REVIEW` → `CATEGORIZATION` → `IMPLEMENTATION_REVIEW` → `COST_REVIEW` → `IMPACT_REVIEW` → `UNDER_REVIEW` (manual review) or `REJECTED`
 
+Only a well-supported duplicate, a clearly demonstrated problem/solution mismatch, or a clearly shallow idea that fails the minimum substantive-value threshold can cause automatic rejection. For study ideas, a statement like "Students have study problems" paired only with a timetable, Pomodoro timers, and reminders is rejected because it identifies neither a specific challenge or impact nor a concrete solution outcome. A specific need and tailored outcome can make even a simple study planner valuable. For other cases, both the user need must be trivial/vague and the solution must lack a concrete outcome; AI merit decisions need at least 90% confidence. Borderline value, feasibility, budget, customer impact, and uncertain similarity results go to administrator review. Review-service errors are not treated as rejection decisions.
+
 ## Architecture
 
 - **Microservice Design**: Runs independently from the main backend
@@ -100,18 +102,18 @@ The main backend automatically triggers AI reviews when applications are submitt
 - Evaluates technical complexity based on tech stack and description
 - Assesses team capability based on team size and experience
 - Considers timeframe and resource requirements
-- Rejects if overall feasibility score < 60%
+- Reports concerns and score to the administrator; does not automatically reject
 
 ### Cost Analysis
 - Estimates development, infrastructure, third-party, and operational costs
 - Compares with requested budget
-- Rejects if budget is insufficient (>20% shortfall)
+- Reports budget concerns to the administrator; does not automatically reject
 
 ### Customer Impact Review
 - Analyzes problem severity and market size
 - Evaluates solution novelty and business viability
 - Assesses user experience potential
-- Rejects if overall impact score < 60%
+- Reports impact concerns to the administrator; does not automatically reject
 
 ## Monitoring
 

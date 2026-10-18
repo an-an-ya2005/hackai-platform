@@ -42,9 +42,9 @@ export class CostReviewService {
         },
       };
 
-//      // Make cost stage non-blocking: provide guidance but do not reject
+      // Cost feasibility is advisory; administrators make the final decision.
       let feedback = '';
-      let result: 'APPROVED' | 'REJECTED' = 'APPROVED';
+      const result: 'APPROVED' = 'APPROVED';
 
       if (!costAnalysis.isFeasible) {
         feedback = `Budget may be insufficient. `;
@@ -87,7 +87,7 @@ export class CostReviewService {
           type: 'COST_ANALYSIS',
         },
         data: {
-          result: 'REJECTED',
+          result: 'PENDING',
           errorMessage: error.message,
           processedAt: new Date(),
         },

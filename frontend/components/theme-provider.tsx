@@ -33,11 +33,13 @@ export function ThemeProvider({
 
   // Initialize theme from localStorage on client side
   useEffect(() => {
-    const savedTheme = localStorage?.getItem(storageKey) as Theme
-    if (savedTheme) {
-      setTheme(savedTheme)
-    }
-    setMounted(true)
+    void Promise.resolve().then(() => {
+      const savedTheme = localStorage?.getItem(storageKey) as Theme
+      if (savedTheme) {
+        setTheme(savedTheme)
+      }
+      setMounted(true)
+    })
   }, [storageKey])
 
   useEffect(() => {

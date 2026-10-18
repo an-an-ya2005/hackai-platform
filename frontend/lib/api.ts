@@ -1,5 +1,3 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://127.0.0.1:3001';
-
 interface Application {
   id: string;
   title: string;
@@ -54,6 +52,12 @@ interface NotificationsResponse {
   totalPages: number;
 }
 
+export interface BrochureMetadata {
+  fileName: string;
+  size: number;
+  uploadedAt: string;
+}
+
 interface AIStage {
   id?: string;
   type?: string;
@@ -80,9 +84,9 @@ export class ApiClient {
 
   private static async fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
     const token = this.getAuthToken();
-    
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(!isFormData && { 'Content-Type': 'application/json' }),
       ...(options.headers as Record<string, string>),
     };
 
@@ -90,7 +94,7 @@ export class ApiClient {
       headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const response = await fetch(url, {
       ...options,
       headers,
     });
@@ -155,6 +159,13 @@ export class ApiClient {
     });
   }
 
+  static async submitApplication(id: string): Promise<Application> {
+    const response = await this.fetchWithAuth(`/api/applications/${id}/submit`, {
+      method: 'POST',
+    });
+    return response.json();
+  }
+
   static async getAIReviewStatus(id: string): Promise<AIReviewStatus> {
     const response = await this.fetchWithAuth(`/api/applications/${id}/ai-review-status`);
     return response.json();
@@ -164,7 +175,7 @@ export class ApiClient {
   static async getAllApplications(): Promise<ApplicationsResponse> {
     // Simplified approach - just fetch all applications without complex parameters
     const url = `/api/applications`;
-    console.log('API Request URL (simplified):', `${API_BASE_URL}${url}`);
+    console.log('API Request URL (simplified):', url);
     console.log('Auth token present:', !!this.getAuthToken());
     
     try {
@@ -235,6 +246,32 @@ export class ApiClient {
     await this.fetchWithAuth(`/api/notifications/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  static async getBrochureMetadata(): Promise<BrochureMetadata | null> {
+    const response = await this.fetchWithAuth('/api/brochure');
+    const responseBody = await response.text();
+    if (!responseBody.trim()) {
+      return null;
+    }
+
+    return JSON.parse(responseBody) as BrochureMetadata | null;
+  }
+
+  static async getBrochureFile(): Promise<Blob> {
+    const response = await this.fetchWithAuth('/api/brochure/file');
+    return response.blob();
+  }
+
+  static async uploadBrochure(file: File): Promise<BrochureMetadata> {
+    const formData = new FormData();
+    formData.append('brochure', file);
+
+    const response = await this.fetchWithAuth('/api/brochure', {
+      method: 'PUT',
+      body: formData,
+    });
+    return response.json();
   }
 }
 

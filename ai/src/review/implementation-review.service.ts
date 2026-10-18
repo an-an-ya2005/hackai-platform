@@ -41,24 +41,19 @@ export class ImplementationReviewService {
         },
       };
 
-      let feedback = '';
-      let result: 'APPROVED' | 'REJECTED' = 'APPROVED';
-
-      if (feasibilityAnalysis.overallScore < 0.6) {
-        result = 'REJECTED';
-        feedback = `Implementation feasibility assessment failed. Overall score: ${Math.round(feasibilityAnalysis.overallScore * 100)}%. `;
-        feedback += `Issues identified: ${feasibilityAnalysis.issues.join(', ')}. `;
-        feedback += feasibilityAnalysis.recommendation;
-      } else {
-        feedback = `Implementation is feasible. Overall score: ${Math.round(feasibilityAnalysis.overallScore * 100)}%. `;
-        feedback += feasibilityAnalysis.recommendation;
-      }
+      const feedback = feasibilityAnalysis.issues.length > 0
+        ? `Implementation feasibility concerns for admin review: ${feasibilityAnalysis.issues.join(', ')}. `
+          + `Advisory score: ${Math.round(feasibilityAnalysis.overallScore * 100)}%. `
+          + feasibilityAnalysis.recommendation
+        : `No significant implementation feasibility concerns were identified. `
+          + `Advisory score: ${Math.round(feasibilityAnalysis.overallScore * 100)}%. `
+          + feasibilityAnalysis.recommendation;
 
       // Update AI review
       await this.databaseService.aIReview.update({
         where: { id: aiReview.id },
         data: {
-          result,
+          result: 'APPROVED',
           feedback,
           metadata: JSON.parse(JSON.stringify(metadata)),
           processedAt: new Date(),
@@ -66,24 +61,12 @@ export class ImplementationReviewService {
         },
       });
 
-      if (result === 'REJECTED') {
-        await this.databaseService.application.update({
-          where: { id: applicationId },
-          data: {
-            status: 'REJECTED',
-            rejectionReason: feedback,
-          },
-        });
-      } else {
-        await this.databaseService.application.update({
-          where: { id: applicationId },
-          data: {
-            status: 'COST_REVIEW',
-          },
-        });
-      }
+      await this.databaseService.application.update({
+        where: { id: applicationId },
+        data: { status: 'COST_REVIEW' },
+      });
 
-      this.logger.log(`Implementation feasibility review completed for application ${applicationId}: ${result}`);
+      this.logger.log(`Implementation feasibility review completed for application ${applicationId}; concerns are advisory`);
     } catch (error) {
       this.logger.error(`Error in implementation feasibility review for application ${applicationId}:`, error);
       
@@ -93,10 +76,14 @@ export class ImplementationReviewService {
           type: 'IMPLEMENTATION_FEASIBILITY',
         },
         data: {
-          result: 'REJECTED',
+          result: 'PENDING',
           errorMessage: error.message,
           processedAt: new Date(),
         },
+      });
+      await this.databaseService.application.update({
+        where: { id: applicationId },
+        data: { status: 'COST_REVIEW' },
       });
     }
   }

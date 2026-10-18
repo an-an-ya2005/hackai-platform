@@ -24,6 +24,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
       PORT: 3001
+      AI_SERVICE_HOST: ai
+      AI_SERVICE_PORT: 3003
       FRONTEND_URL: http://localhost:3000
       BACKEND_URL: http://localhost:3001
       CORS_ORIGIN: http://127.0.0.1:3000,http://localhost:3000

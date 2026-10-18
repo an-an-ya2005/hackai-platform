@@ -42,25 +42,17 @@ export class CustomerImpactReviewService {
         },
       };
 
-      let feedback = '';
-      let result: 'APPROVED' | 'REJECTED' = 'APPROVED';
-
-      if (impactAnalysis.overallImpactScore < 0.6) {
-        result = 'REJECTED';
-        feedback = `Customer impact assessment failed. Overall impact score: ${Math.round(impactAnalysis.overallImpactScore * 100)}%. `;
-        feedback += `Issues identified: ${impactAnalysis.concerns.join(', ')}. `;
-        feedback += impactAnalysis.recommendation;
-      } else {
-        feedback = `Customer impact assessment passed. Overall impact score: ${Math.round(impactAnalysis.overallImpactScore * 100)}%. `;
-        feedback += `Strengths: ${impactAnalysis.strengths.join(', ')}. `;
-        feedback += impactAnalysis.recommendation;
-      }
+      const feedback = `Customer impact assessment for admin review. `
+        + `Advisory score: ${Math.round(impactAnalysis.overallImpactScore * 100)}%. `
+        + `Strengths: ${impactAnalysis.strengths.join(', ') || 'None identified'}. `
+        + `Concerns: ${impactAnalysis.concerns.join(', ') || 'None identified'}. `
+        + impactAnalysis.recommendation;
 
       // Update AI review
       await this.databaseService.aIReview.update({
         where: { id: aiReview.id },
         data: {
-          result,
+          result: 'APPROVED',
           feedback,
           metadata: JSON.parse(JSON.stringify(metadata)),
           processedAt: new Date(),
@@ -68,26 +60,12 @@ export class CustomerImpactReviewService {
         },
       });
 
-      if (result === 'REJECTED') {
-        await this.databaseService.application.update({
-          where: { id: applicationId },
-          data: {
-            status: 'REJECTED',
-            rejectionReason: feedback,
-          },
-        });
-      } else {
-        // Move to admin decision after AI report is generated
-        await this.databaseService.application.update({
-          where: { id: applicationId },
-          data: {
-            status: 'UNDER_REVIEW',
-            rejectionReason: null,
-          },
-        });
-      }
+      await this.databaseService.application.update({
+        where: { id: applicationId },
+        data: { status: 'UNDER_REVIEW', rejectionReason: null },
+      });
 
-      this.logger.log(`Customer impact review completed for application ${applicationId}: ${result}`);
+      this.logger.log(`Customer impact review completed for application ${applicationId}; final decision is for admin review`);
     } catch (error) {
       this.logger.error(`Error in customer impact review for application ${applicationId}:`, error);
       
@@ -97,10 +75,14 @@ export class CustomerImpactReviewService {
           type: 'CUSTOMER_IMPACT',
         },
         data: {
-          result: 'REJECTED',
+          result: 'PENDING',
           errorMessage: error.message,
           processedAt: new Date(),
         },
+      });
+      await this.databaseService.application.update({
+        where: { id: applicationId },
+        data: { status: 'UNDER_REVIEW', rejectionReason: null },
       });
     }
   }

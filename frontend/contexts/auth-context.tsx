@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { authService, User, AuthResponse } from '@/lib/auth';
+import { authService, User, AuthResponse, AccountRole } from '@/lib/auth';
 
 interface AuthState {
   user: User | null;
@@ -44,8 +44,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<User>;
-  register: (email: string, password: string, firstName: string, lastName: string) => Promise<User>;
+  login: (email: string, password: string, role?: AccountRole) => Promise<User>;
+  register: (email: string, password: string, firstName: string, lastName: string, role?: AccountRole) => Promise<User>;
   logout: () => void;
   loginWithGoogle: () => void;
   loginWithGithub: () => void;
@@ -77,10 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, role?: AccountRole) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const response: AuthResponse = await authService.login({ email, password });
+      const response: AuthResponse = await authService.login({ email, password, role });
       authService.setToken(response.access_token);
       dispatch({ type: 'SET_USER', payload: response.user });
       return response.user;
@@ -90,14 +90,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (email: string, password: string, firstName: string, lastName: string) => {
+  const register = async (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string,
+    role?: AccountRole,
+  ) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response: AuthResponse = await authService.register({ 
         email, 
         password, 
         firstName, 
-        lastName 
+        lastName,
+        role,
       });
       authService.setToken(response.access_token);
       dispatch({ type: 'SET_USER', payload: response.user });

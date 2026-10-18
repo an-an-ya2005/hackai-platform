@@ -18,7 +18,9 @@ import {
   XCircle,
   FileText,
   Users,
-  Code
+  Code,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { ApiClient, type Application } from "@/lib/api";
@@ -42,9 +44,43 @@ function ApplicationDetailContent() {
   const router = useRouter();
   const [application, setApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const applicationId = params.id as string;
+  const isOwner = Boolean(user && application?.user?.id === user.id);
+
+  const handleDelete = async () => {
+    if (!application || !window.confirm(`Delete "${application.title}"? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await ApiClient.deleteApplication(application.id);
+      toast.success("Idea deleted");
+      router.push("/applications");
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "Failed to delete idea");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSubmitDraft = async () => {
+    if (!application) return;
+
+    try {
+      setActionLoading(true);
+      await ApiClient.submitApplication(application.id);
+      toast.success("Idea submitted for review");
+      router.push("/applications");
+    } catch (submitError) {
+      toast.error(submitError instanceof Error ? submitError.message : "Failed to submit idea");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   // Redirect admin users to admin panel - they shouldn't access participant features
   useEffect(() => {
@@ -352,11 +388,27 @@ function ApplicationDetailContent() {
               <Button variant="outline" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
-              {application.status?.toUpperCase() === 'DRAFT' && (
-                <Button asChild>
-                  <Link href={`/applications/${application.id}/edit`}>
-                    Continue Editing
-                  </Link>
+              {isOwner && (
+                <>
+                  <Button asChild>
+                    <Link href={`/applications/${application.id}/edit`}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit Idea
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={actionLoading}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Idea
+                  </Button>
+                </>
+              )}
+              {isOwner && application.status?.toUpperCase() === 'DRAFT' && (
+                <Button onClick={handleSubmitDraft} disabled={actionLoading}>
+                  {actionLoading ? "Submitting..." : "Submit for Review"}
                 </Button>
               )}
             </div>

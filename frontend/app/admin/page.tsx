@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react";
 import { Navigation } from "@/components/navigation";
 import { AdminProtectedRoute } from "@/components/admin-protected-route";
 import { ApplicationReviewModal } from "@/components/application-review-modal";
@@ -12,10 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Users, FileText, Clock, CheckCircle, XCircle, Search, 
-  Calendar, Eye, Star, RefreshCw, AlertCircle, Loader2
+  Calendar, Eye, Star, RefreshCw, AlertCircle, Loader2, Upload, Download
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { ApiClient, type Application } from "@/lib/api";
+import { ApiClient, type Application, type BrochureMetadata } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function AdminPage() {
@@ -37,6 +37,9 @@ function AdminDashboardContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [brochure, setBrochure] = useState<BrochureMetadata | null>(null);
+  const [brochureUploading, setBrochureUploading] = useState(false);
+  const brochureInputRef = useRef<HTMLInputElement>(null);
   
   // Modal state
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
@@ -44,9 +47,6 @@ function AdminDashboardContent() {
 
   const fetchApplications = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
       // Always fetch all applications without status filter - let client-side handle filtering
       console.log('Fetching all applications (client-side filtering)');
       
@@ -94,8 +94,40 @@ function AdminDashboardContent() {
   };
 
   useEffect(() => {
-    fetchApplications();
+    void Promise.resolve().then(fetchApplications);
   }, [fetchApplications]);
+
+  useEffect(() => {
+    ApiClient.getBrochureMetadata()
+      .then(setBrochure)
+      .catch((err: unknown) => {
+        console.error('Failed to load brochure information:', err);
+        toast.error('Failed to load brochure information');
+      });
+  }, []);
+
+  const handleBrochureUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Please choose a PDF file');
+      return;
+    }
+
+    try {
+      setBrochureUploading(true);
+      const uploadedBrochure = await ApiClient.uploadBrochure(file);
+      setBrochure(uploadedBrochure);
+      toast.success('Hackathon brochure uploaded');
+    } catch (err) {
+      console.error('Failed to upload brochure:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to upload brochure');
+    } finally {
+      setBrochureUploading(false);
+    }
+  };
 
   // Remove the separate status filter effect since we're doing client-side filtering now
 
@@ -206,6 +238,52 @@ function AdminDashboardContent() {
           </div>
         )}
       </div>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Hackathon Brochure
+          </CardTitle>
+          <CardDescription>
+            Upload the PDF brochure participants can view and download. Uploading a new brochure replaces the current one.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-muted-foreground">
+            {brochure
+              ? <>Current brochure: <span className="font-medium text-foreground">{brochure.fileName}</span>
+                  <span className="ml-2">({(brochure.size / (1024 * 1024)).toFixed(2)} MB)</span></>
+              : 'No brochure uploaded yet.'}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {brochure && (
+              <Button variant="outline" asChild>
+                <a href="/brochure">
+                  <Download className="mr-2 h-4 w-4" />
+                  View brochure
+                </a>
+              </Button>
+            )}
+            <input
+              ref={brochureInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={handleBrochureUpload}
+            />
+            <Button
+              onClick={() => brochureInputRef.current?.click()}
+              disabled={brochureUploading}
+            >
+              {brochureUploading
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <Upload className="mr-2 h-4 w-4" />}
+              {brochureUploading ? 'Uploading...' : brochure ? 'Replace PDF' : 'Upload PDF'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

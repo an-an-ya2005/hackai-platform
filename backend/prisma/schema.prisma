@@ -163,3 +163,13 @@ model Notification {
 
   @@map("notifications")
 }
+
+model Brochure {
+  id         String   @id
+  fileName   String
+  data       Bytes
+  size       Int
+  uploadedAt DateTime @default(now())
+
+  @@map("brochures")
+}
